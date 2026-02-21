@@ -162,9 +162,63 @@ export async function runSetup(): Promise<void> {
   }
 
   // ═══════════════════════════════════════
-  // Step 2: AI Provider
+  // Step 2: Agent Identity
   // ═══════════════════════════════════════
-  header('Step 2: AI Provider');
+  header('Step 2: Agent Identity');
+
+  console.log('Give your agent a name and personality.');
+  console.log(chalk.gray('This is how it will introduce itself to users.'));
+  console.log();
+
+  // Name
+  const existingName = config.agent?.name || 'MarketClaw';
+  const agentName = await question(chalk.cyan(`Agent name [${existingName}]: `));
+  const name = agentName.trim() || existingName;
+
+  // Emoji
+  const existingEmoji = config.agent?.emoji || '🦀';
+  const agentEmoji = await question(chalk.cyan(`Signature emoji [${existingEmoji}]: `));
+  const emoji = agentEmoji.trim() || existingEmoji;
+
+  // Voice
+  console.log();
+  console.log('Voice style:');
+  info('1. Professional — Formal, polished');
+  info('2. Casual — Relaxed, conversational');
+  info('3. Friendly — Warm, approachable (default)');
+  info('4. Playful — Fun, energetic, uses humor');
+  
+  const voiceChoice = await question(chalk.cyan('Voice (1-4) [3]: '));
+  const voiceMap: Record<string, 'professional' | 'casual' | 'friendly' | 'playful'> = {
+    '1': 'professional',
+    '2': 'casual',
+    '3': 'friendly',
+    '4': 'playful',
+  };
+  const voice = voiceMap[voiceChoice.trim()] || 'friendly';
+
+  // Persona (optional)
+  console.log();
+  console.log(chalk.gray('Optional: Add a persona description'));
+  info('e.g., "a witty marketing strategist" or "your friendly growth hacker"');
+  const personaInput = await question(chalk.cyan('Persona (Enter to skip): '));
+  const persona = personaInput.trim() || undefined;
+
+  // Save agent config
+  config.agent = {
+    ...config.agent,
+    name,
+    emoji,
+    voice,
+    persona,
+  };
+
+  success(`Agent configured as ${emoji} ${name} (${voice})`);
+
+  // ═══════════════════════════════════════
+  // Step 3: AI Provider
+  // ═══════════════════════════════════════
+  header('Step 3: AI Provider');
 
   console.log('Choose your AI provider:');
   console.log();
@@ -281,9 +335,9 @@ export async function runSetup(): Promise<void> {
   }
 
   // ═══════════════════════════════════════
-  // Step 3: Optional Integrations
+  // Step 4: Optional Integrations
   // ═══════════════════════════════════════
-  header('Step 3: Integrations (Optional)');
+  header('Step 4: Integrations (Optional)');
 
   console.log('MarketClaw can integrate with these services.');
   console.log(chalk.gray('Skip any you don\'t need - you can add them later.'));

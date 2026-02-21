@@ -111,6 +111,12 @@ export const generateImageTool: Tool = {
           resolution,
           prompt: params.prompt,
         },
+        cost: {
+          usd: 0.02, // Gemini Imagen-3 approximate cost per image
+          provider: 'gemini',
+          units: 1,
+          unitType: 'images',
+        },
       };
     } catch (err: any) {
       return {
@@ -198,6 +204,12 @@ export const editImageTool: Tool = {
           resolution,
           inputImage: params.inputImage,
           prompt: params.prompt,
+        },
+        cost: {
+          usd: 0.025, // Image editing costs slightly more
+          provider: 'gemini',
+          units: 1,
+          unitType: 'images',
         },
       };
     } catch (err: any) {

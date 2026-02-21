@@ -1,6 +1,12 @@
-# MarketClaw 🦀
+<p align="center">
+  <img src="assets/logo.png" alt="MarketClaw" width="200">
+</p>
 
-**AI-powered marketing agent that lives in Telegram.**
+<h1 align="center">MarketClaw 🦀</h1>
+
+<p align="center">
+  <strong>AI-powered marketing agent that lives in Telegram.</strong>
+</p>
 
 Build in public, automate your marketing, never forget your campaigns.
 
@@ -100,6 +106,72 @@ MarketClaw remembers:
 └── knowledge/         # Product knowledge base
 ```
 
+### 🤖 Sub-Agents
+
+Delegate tasks to specialized AI agents:
+
+| Agent | Name | Specialty |
+|-------|------|-----------|
+| 🐦 | Tweety | Twitter threads, viral hooks |
+| 💼 | Quinn | LinkedIn, B2B content |
+| ✉️ | Emma | Email marketing, outreach |
+| 🎨 | Pixel | Visual content, images |
+| 📊 | Dash | Analytics, metrics |
+| 🔍 | Scout | Research, competitor intel |
+| 🚀 | Hunter | Product Hunt launches |
+
+```
+You: "Ask Tweety to write a thread about building in public"
+Bot: 🐦 Tweety completed the task:
+     1/ Building in public is scary. Here's why you should do it anyway...
+```
+
+### 👥 Team Management
+
+Multi-user support with roles:
+
+- **Admin** — Full access, manage team
+- **Manager** — Approve content, post
+- **Creator** — Draft content (needs approval)
+- **Viewer** — Read-only analytics
+
+```
+You: "Add @jane as a creator for ProofPing"
+Bot: ✅ Added Jane to the team (creator for ProofPing)
+```
+
+### ✅ Approval Workflow
+
+Quality control for team content:
+
+```
+Creator: "Request approval for this tweet"
+Bot: 📝 Notifying approvers...
+
+Manager: "approve"
+Bot: ✅ Approved! Ready to post.
+```
+
+### 💰 Cost Tracking
+
+Monitor and control API spending:
+
+```
+You: "How much have we spent this week?"
+Bot: 💰 Total: $12.45 (156 operations)
+     By Tool: generate_image: $8.00, send_email: $2.15
+     By Agent: Pixel: $8.00, Emma: $2.15
+     By Provider: gemini: $8.00, resend: $2.15
+
+You: "Set a $50 monthly budget"
+Bot: ✅ Budget "Monthly Limit" created: $50/monthly (global)
+```
+
+Features:
+- Per-tool, per-agent, per-product cost attribution
+- Daily/weekly/monthly budgets with warn or block actions
+- Trend analysis and reporting
+
 ---
 
 ## Configuration
@@ -138,6 +210,9 @@ providers:
 
 agent:
   name: MarketClaw
+  emoji: 🦀
+  voice: friendly    # professional, casual, friendly, playful
+  persona: your friendly marketing assistant
 ```
 
 See [docs/SETUP.md](./docs/SETUP.md) for detailed configuration.
@@ -150,6 +225,7 @@ See [docs/SETUP.md](./docs/SETUP.md) for detailed configuration.
 src/
 ├── index.ts           # Agent startup
 ├── cli.ts             # CLI commands
+├── setup.ts           # Interactive setup wizard
 ├── providers/         # AI providers (swappable)
 │   ├── anthropic.ts
 │   ├── openai.ts
@@ -157,8 +233,22 @@ src/
 │   ├── gemini.ts
 │   ├── ollama.ts
 │   └── openrouter.ts
-├── channels/          # Chat interfaces
-│   └── telegram.ts
+├── channels/          # Chat interfaces (modular)
+│   ├── telegram.ts
+│   ├── discord.ts
+│   ├── slack.ts
+│   └── cli.ts
+├── agents/            # Sub-agent system
+│   ├── specialists.ts # Built-in specialists
+│   ├── registry.ts    # Agent management
+│   └── tools.ts       # delegate_task, etc.
+├── team/              # Multi-user management
+│   ├── manager.ts     # Team CRUD
+│   ├── permissions.ts # Tool-level permissions
+│   └── tools.ts       # Team management tools
+├── approvals/         # Content approval workflow
+│   ├── manager.ts     # Approval logic
+│   └── tools.ts       # approve, reject, etc.
 ├── tools/             # Agent capabilities
 │   ├── scheduler-tools.ts
 │   ├── knowledge-tools.ts
@@ -200,10 +290,19 @@ marketclaw config
 
 ## Documentation
 
-- [Setup Guide](./docs/SETUP.md) — Detailed installation
+- [Setup Guide](./docs/SETUP.md) — Detailed installation & configuration
+- [Channels](./docs/CHANNELS.md) — Telegram, Discord, Slack, CLI
 - [Providers](./docs/PROVIDERS.md) — Configure AI providers
+- [Sub-Agents](./docs/SUB-AGENTS.md) — Specialist agents & delegation
+- [Team](./docs/TEAM.md) — Multi-user roles & permissions
+- [Approvals](./docs/APPROVALS.md) — Content approval workflow
+- [Costs](./docs/COSTS.md) — Cost tracking & budgets
+- [Daemon](./docs/DAEMON.md) — Running as a background service
 - [Tools](./docs/TOOLS.md) — Available tools & how to add more
 - [Skills](./docs/SKILLS.md) — Plugin system
+- [API Reference](./docs/API.md) — Complete tool reference
+- [Architecture](./docs/ARCHITECTURE.md) — System design overview
+- [FAQ](./docs/FAQ.md) — Common questions
 - [Contributing](./docs/CONTRIBUTING.md) — How to contribute
 
 ---
@@ -216,10 +315,14 @@ marketclaw config
 - [x] Tool system
 - [x] Scheduling
 - [x] Knowledge base
+- [x] Sub-agents system
+- [x] Team management
+- [x] Approval workflow
+- [x] Modular channels
+- [x] Cost tracking & budgets
 - [ ] Skills/Marketplace
 - [ ] Web dashboard
-- [ ] Analytics
-- [ ] Discord channel
+- [ ] Analytics dashboard
 - [ ] Automated posting
 
 ---

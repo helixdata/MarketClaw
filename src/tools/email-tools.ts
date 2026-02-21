@@ -152,6 +152,12 @@ export const sendEmailTool: Tool = {
         to: toList,
         subject: params.subject,
       },
+      cost: {
+        usd: 0.001 * toList.length, // ~$1 per 1000 emails
+        provider: 'resend',
+        units: toList.length,
+        unitType: 'emails',
+      },
     };
   },
 };
@@ -319,10 +325,17 @@ export const sendLaunchAnnouncementTool: Tool = {
       };
     }
 
+    const recipientCount = params.to.split(',').length;
     return {
       success: true,
       message: `✅ Launch announcement sent!`,
       data: { id: result.id, to: params.to },
+      cost: {
+        usd: 0.001 * recipientCount,
+        provider: 'resend',
+        units: recipientCount,
+        unitType: 'emails',
+      },
     };
   },
 };

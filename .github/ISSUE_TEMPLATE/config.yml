@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or Discussion
+    url: https://github.com/marketclaw/marketclaw/discussions
+    about: Ask questions or start a discussion
+  - name: Documentation
+    url: https://github.com/marketclaw/marketclaw/tree/main/docs
+    about: Check the documentation first

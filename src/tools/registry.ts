@@ -4,6 +4,16 @@
  */
 
 import { Tool, ToolDefinition, ToolResult, RegisteredTool, ToolCategory } from './types.js';
+import { costTracker } from '../costs/tracker.js';
+
+/**
+ * Execution context passed to tools for cost attribution
+ */
+export interface ExecutionContext {
+  agent?: string;
+  productId?: string;
+  userId?: string;
+}
 
 export class ToolRegistry {
   private tools: Map<string, RegisteredTool> = new Map();
@@ -81,7 +91,7 @@ export class ToolRegistry {
   /**
    * Execute a tool by name
    */
-  async execute(name: string, params: any): Promise<ToolResult> {
+  async execute(name: string, params: any, context?: ExecutionContext): Promise<ToolResult> {
     const tool = this.tools.get(name);
 
     if (!tool) {
@@ -99,7 +109,37 @@ export class ToolRegistry {
     }
 
     try {
-      return await tool.execute(params);
+      // Check budget before execution
+      const budgetCheck = await costTracker.shouldBlock({
+        tool: name,
+        agent: context?.agent,
+        productId: context?.productId,
+        userId: context?.userId,
+      });
+
+      if (budgetCheck.blocked) {
+        return {
+          success: false,
+          message: `⛔ Blocked by budget: ${budgetCheck.reason}`,
+        };
+      }
+
+      // Execute the tool
+      const result = await tool.execute(params);
+
+      // Log cost if the tool reported one
+      if (result.cost && result.cost.usd > 0) {
+        await costTracker.log({
+          tool: name,
+          cost: result.cost,
+          agent: context?.agent,
+          productId: context?.productId,
+          userId: context?.userId,
+          meta: { params },
+        });
+      }
+
+      return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {

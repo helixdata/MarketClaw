@@ -76,14 +76,39 @@ export class GeminiProvider implements Provider {
         }
         contents.push({ role: 'model', parts });
       } else if (m.role === 'user') {
-        contents.push({
-          role: 'user',
-          parts: [{ text: m.content }],
-        });
+        // Handle content that may include images
+        const parts: any[] = [];
+        
+        if (typeof m.content === 'string') {
+          parts.push({ text: m.content });
+        } else if (Array.isArray(m.content)) {
+          // Mixed content (text + images) - convert to Gemini format
+          for (const part of m.content) {
+            if (part.type === 'text') {
+              parts.push({ text: part.text });
+            } else if (part.type === 'image') {
+              // Gemini inline_data format
+              if (part.source.type === 'base64') {
+                parts.push({
+                  inline_data: {
+                    mime_type: part.source.mediaType || 'image/jpeg',
+                    data: part.source.data,
+                  },
+                });
+              }
+              // Note: Gemini doesn't support URL images directly, would need to download first
+            }
+          }
+        } else {
+          parts.push({ text: String(m.content) });
+        }
+        
+        contents.push({ role: 'user', parts });
       } else if (m.role === 'assistant') {
+        const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
         contents.push({
           role: 'model',
-          parts: [{ text: m.content }],
+          parts: [{ text: content }],
         });
       }
     }

@@ -13,14 +13,35 @@ import { z } from 'zod';
 const CONFIG_DIR = path.join(homedir(), '.marketclaw');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.yaml');
 
+// Channel config schema
+const ChannelConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  botToken: z.string().optional(),
+  allowedUsers: z.array(z.number()).optional(),
+  adminUsers: z.array(z.number()).optional(),
+  // Discord-specific
+  guildIds: z.array(z.string()).optional(),
+  allowedRoles: z.array(z.string()).optional(),
+  // Slack-specific
+  appToken: z.string().optional(),
+  signingSecret: z.string().optional(),
+  allowedChannels: z.array(z.string()).optional(),
+  // CLI-specific
+  userId: z.string().optional(),
+  prompt: z.string().optional(),
+}).passthrough();
+
 // Config schema
 const ConfigSchema = z.object({
-  // Telegram
+  // Telegram (legacy, but still supported)
   telegram: z.object({
     botToken: z.string().optional(),
     allowedUsers: z.array(z.number()).optional(),
     adminUsers: z.array(z.number()).optional(),
   }).optional(),
+
+  // Channels (new modular system)
+  channels: z.record(z.string(), ChannelConfigSchema).optional(),
 
   // Providers
   providers: z.object({
@@ -35,10 +56,13 @@ const ConfigSchema = z.object({
     }).optional(),
   }).optional(),
 
-  // Agent
+  // Agent identity
   agent: z.object({
     name: z.string().default('MarketClaw'),
-    systemPrompt: z.string().optional(),
+    emoji: z.string().default('🦀'),
+    persona: z.string().optional(),  // e.g., "a friendly marketing expert"
+    voice: z.enum(['professional', 'casual', 'friendly', 'playful']).default('friendly'),
+    systemPrompt: z.string().optional(),  // Full override if needed
   }).optional(),
 
   // Marketing channels (for posting, not chat)
@@ -59,16 +83,39 @@ const ConfigSchema = z.object({
 
   // Workspace
   workspace: z.string().optional(),
+
+  // Sub-agents
+  agents: z.object({
+    enabled: z.boolean().default(true),
+    builtins: z.union([z.array(z.string()), z.literal('all'), z.literal('none')]).default('all'),
+    customDir: z.string().optional(),
+    // Global defaults
+    defaultTimeoutMs: z.number().default(120000),   // 2 min
+    defaultMaxIterations: z.number().default(10),
+    // Per-agent config
+    agents: z.record(z.string(), z.object({
+      enabled: z.boolean().optional(),
+      name: z.string().optional(),
+      emoji: z.string().optional(),
+      persona: z.string().optional(),
+      voice: z.enum(['professional', 'casual', 'friendly', 'playful']).optional(),
+      model: z.string().optional(),
+      taskTimeoutMs: z.number().optional(),
+      maxIterations: z.number().optional(),
+    })).optional(),
+  }).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 
-const defaultConfig: Config = {
+const defaultConfig: Partial<Config> = {
   providers: {
     default: 'anthropic',
   },
   agent: {
     name: 'MarketClaw',
+    emoji: '🦀',
+    voice: 'friendly',
   },
 };
 
@@ -121,15 +168,71 @@ export async function getConfigPath(): Promise<string> {
   return CONFIG_FILE;
 }
 
-// Default system prompt for marketing agent
-export const DEFAULT_SYSTEM_PROMPT = `You are MarketClaw, an AI marketing agent. Your job is to help with product marketing.
+// Voice style descriptions
+const VOICE_STYLES: Record<string, string> = {
+  professional: 'Be professional and polished. Use formal language, avoid slang.',
+  casual: 'Be casual and relaxed. Use conversational language.',
+  friendly: 'Be warm and approachable. Balance professionalism with friendliness.',
+  playful: 'Be fun and energetic. Use humor where appropriate, keep things light.',
+};
+
+// Agent config type for building prompts
+interface AgentIdentity {
+  name?: string;
+  emoji?: string;
+  persona?: string;
+  voice?: 'professional' | 'casual' | 'friendly' | 'playful';
+  systemPrompt?: string;
+}
+
+// Build system prompt from agent config
+export function buildSystemPrompt(agent?: AgentIdentity): string {
+  const name = agent?.name || 'MarketClaw';
+  const emoji = agent?.emoji || '🦀';
+  const persona = agent?.persona || 'an AI marketing agent';
+  const voice = agent?.voice || 'friendly';
+  const voiceDesc = VOICE_STYLES[voice] || VOICE_STYLES.friendly;
+
+  return `You are ${name} ${emoji}, ${persona}. Your job is to help with product marketing.
+
+## Identity
+- Your name is **${name}**
+- When asked who you are, introduce yourself as ${name}
+- Use "${emoji}" as your signature emoji when appropriate
+
+## Voice & Tone
+${voiceDesc}
+
+## Your Team
+You lead a crew of specialist agents. When asked about "the team" or "who's on the team", these are your people:
+- 🐦 **Tweety** — Twitter/X specialist (viral hooks, threads)
+- 💼 **Quinn** — LinkedIn specialist (B2B, thought leadership)
+- ✉️ **Emma** — Email specialist (cold outreach, sequences)
+- 🎨 **Pixel** — Creative director (visuals, image generation)
+- 📊 **Dash** — Analytics specialist (metrics, performance)
+- 🔍 **Scout** — Research specialist (competitors, market intel)
+- 🚀 **Hunter** — Product Hunt specialist (launches, indie marketing)
+
+Use \`delegate_task\` to assign work to them. They have their own personalities and expertise.
+Introduce them by name when discussing the team. They're your crew!
+
+## Human Team Members
+You may also work with human team members. Each person has:
+- A name and role (admin, manager, creator, viewer)
+- Personal preferences (communication style, timezone)
+- Their own conversation history with you
+
+Use team tools (\`list_team\`, \`add_team_member\`, \`assign_roles\`) to manage the human team.
+Remember things about each person with \`remember_about_member\`.
 
 ## Capabilities
+- Lead and coordinate your specialist team
 - Create marketing content (tweets, LinkedIn posts, Product Hunt launches)
 - Manage marketing campaigns
 - Track and analyze performance
 - Maintain brand voice consistency
 - Schedule and publish posts
+- Manage leads and outreach
 
 ## Behavior
 - Be proactive: suggest improvements, spot opportunities
@@ -152,9 +255,14 @@ You can be asked to:
 - Analyze what's working
 - Schedule content
 - Generate images and visuals
+- Manage leads
 
 ## Images
 When generating images, use get_image_path with "latest" to send them to the user.
 After generating an image, ALWAYS call get_image_path to show it.
 
 Always confirm before posting to external channels.`;
+}
+
+// Legacy export for compatibility
+export const DEFAULT_SYSTEM_PROMPT = buildSystemPrompt({});

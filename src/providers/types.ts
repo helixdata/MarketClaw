@@ -3,9 +3,35 @@
  * Inspired by ZeroClaw's trait-driven architecture
  */
 
+/**
+ * Image content for vision-capable models
+ */
+export interface ImageContent {
+  type: 'image';
+  source: {
+    type: 'base64' | 'url';
+    mediaType?: string;  // e.g., 'image/jpeg', 'image/png'
+    data?: string;       // base64 data if type is 'base64'
+    url?: string;        // URL if type is 'url'
+  };
+}
+
+/**
+ * Text content
+ */
+export interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+/**
+ * Message content can be text, image, or mixed
+ */
+export type MessageContent = string | (TextContent | ImageContent)[];
+
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: MessageContent;
   toolCallId?: string;
   toolCalls?: ToolCall[];
 }

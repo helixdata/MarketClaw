@@ -17,6 +17,7 @@ import { emailTools } from './email-tools.js';
 import { imapTools } from './imap-tools.js';
 import { configTools } from './config-tools.js';
 import { leadsTools } from './leads-tools.js';
+import { costTools } from '../costs/tools.js';
 
 /**
  * Initialize all built-in tools
@@ -52,6 +53,9 @@ export async function initializeTools(): Promise<void> {
   // Register leads tools (CRM-lite)
   toolRegistry.registerAll(leadsTools, { category: 'marketing' });
   
+  // Register cost tracking tools
+  toolRegistry.registerAll(costTools, { category: 'utility' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -66,3 +70,4 @@ export { emailTools } from './email-tools.js';
 export { imapTools } from './imap-tools.js';
 export { configTools } from './config-tools.js';
 export { leadsTools } from './leads-tools.js';
+export { costTools } from '../costs/tools.js';

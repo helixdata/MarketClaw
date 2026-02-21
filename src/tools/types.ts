@@ -23,10 +23,33 @@ export interface ToolDefinition {
   };
 }
 
+/**
+ * Cost info returned by a tool
+ */
+export interface ToolCost {
+  /** Normalized cost in USD */
+  usd: number;
+  
+  /** Provider name (openai, anthropic, gemini, resend, etc.) */
+  provider: string;
+  
+  /** Number of units consumed */
+  units?: number;
+  
+  /** Type of units */
+  unitType?: 'tokens' | 'emails' | 'images' | 'characters' | 'api_calls' | 'minutes';
+  
+  /** Breakdown (e.g., { inputTokens: 100, outputTokens: 50 }) */
+  breakdown?: Record<string, number>;
+}
+
 export interface ToolResult {
   success: boolean;
   message: string;
   data?: any;
+  
+  /** Cost incurred by this tool execution (if any) */
+  cost?: ToolCost;
 }
 
 /**

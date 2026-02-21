@@ -3,52 +3,192 @@
  * Primary interaction channel for MarketClaw
  */
 
-import { Telegraf, Context } from 'telegraf';
-import { Message } from '../providers/types.js';
-import { memory } from '../memory/index.js';
-import { knowledge } from '../knowledge/index.js';
-import { providers } from '../providers/index.js';
-import { toolRegistry } from '../tools/index.js';
+import { Telegraf } from 'telegraf';
+import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, MessageHandler } from './types.js';
+import { channelRegistry } from './registry.js';
 import pino from 'pino';
+import { writeFile, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
+import { homedir } from 'os';
 
 const logger = pino({ name: 'telegram' });
 
-export interface TelegramConfig {
+export interface TelegramConfig extends ChannelConfig {
   botToken: string;
   allowedUsers?: number[];
   adminUsers?: number[];
 }
 
-export class TelegramChannel {
-  private bot: Telegraf;
-  private config: TelegramConfig;
-  private conversationHistory: Map<number, Message[]> = new Map();
-  private systemPrompt: string = '';
+export class TelegramChannel implements Channel {
+  readonly name = 'telegram';
+  readonly displayName = 'Telegram';
+  readonly description = 'Interact with MarketClaw via Telegram bot';
+  readonly requiredConfig = ['botToken'];
+  readonly optionalConfig = ['allowedUsers', 'adminUsers'];
+  readonly requiredEnv = ['TELEGRAM_BOT_TOKEN'];
 
-  constructor(config: TelegramConfig) {
-    this.config = config;
-    this.bot = new Telegraf(config.botToken);
+  private bot: Telegraf | null = null;
+  private config: TelegramConfig | null = null;
+  private messageHandler: MessageHandler | null = null;
+
+  async initialize(config: ChannelConfig): Promise<void> {
+    this.config = config as TelegramConfig;
+    
+    const token = this.config.botToken || process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) {
+      throw new Error('Telegram bot token not configured');
+    }
+    
+    this.bot = new Telegraf(token);
+    this.setupHandlers();
+    
+    logger.info('Telegram channel initialized');
   }
 
-  /**
-   * Set the system prompt for the agent
-   */
-  setSystemPrompt(prompt: string): void {
-    this.systemPrompt = prompt;
-  }
-
-  /**
-   * Initialize and start the bot
-   */
   async start(): Promise<void> {
+    if (!this.bot) {
+      throw new Error('Channel not initialized');
+    }
+
+    await this.bot.launch();
+    logger.info('Telegram bot started');
+
+    // Graceful shutdown
+    process.once('SIGINT', () => this.stop());
+    process.once('SIGTERM', () => this.stop());
+  }
+
+  async stop(): Promise<void> {
+    if (this.bot) {
+      this.bot.stop();
+      logger.info('Telegram bot stopped');
+    }
+  }
+
+  async send(userId: string, response: ChannelResponse): Promise<void> {
+    if (!this.bot) {
+      throw new Error('Channel not initialized');
+    }
+
+    const numericUserId = parseInt(userId, 10);
+    
+    // Build keyboard if buttons provided
+    const extra: any = { parse_mode: 'Markdown' as const };
+    
+    if (response.buttons && response.buttons.length > 0) {
+      extra.reply_markup = {
+        inline_keyboard: response.buttons.map(btn => [{
+          text: btn.text,
+          callback_data: btn.callback,
+        }]),
+      };
+    }
+
+    if (response.replyToId) {
+      extra.reply_parameters = { message_id: parseInt(response.replyToId, 10) };
+    }
+
+    try {
+      await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+    } catch (err: any) {
+      // Retry without Markdown if parsing fails
+      if (err?.response?.description?.includes("parse entities")) {
+        logger.warn('Markdown parse failed, retrying without formatting');
+        delete extra.parse_mode;
+        await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  isConfigured(): boolean {
+    return !!(this.config?.botToken || process.env.TELEGRAM_BOT_TOKEN);
+  }
+
+  async validateConfig(config: ChannelConfig): Promise<{ valid: boolean; error?: string }> {
+    const token = (config as TelegramConfig).botToken;
+    if (!token) {
+      return { valid: false, error: 'Bot token is required' };
+    }
+
+    try {
+      const testBot = new Telegraf(token);
+      const me = await testBot.telegram.getMe();
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, error: `Invalid token: ${err.message}` };
+    }
+  }
+
+  /**
+   * Download images from Telegram and save locally
+   */
+  private async downloadTelegramImages(ctx: any, fileIds: string[]): Promise<ChannelImage[]> {
+    const images: ChannelImage[] = [];
+    const imagesDir = path.join(homedir(), '.marketclaw', 'images');
+    
+    if (!existsSync(imagesDir)) {
+      await mkdir(imagesDir, { recursive: true });
+    }
+
+    for (const fileId of fileIds) {
+      try {
+        // Get file info from Telegram
+        const file = await ctx.telegram.getFile(fileId);
+        const fileUrl = `https://api.telegram.org/file/bot${this.config!.botToken || process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+        
+        // Download the file
+        const response = await fetch(fileUrl);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const base64 = buffer.toString('base64');
+        
+        // Determine mime type from file path
+        const ext = path.extname(file.file_path || '').toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+        };
+        const mimeType = mimeTypes[ext] || 'image/jpeg';
+        
+        // Save locally
+        const filename = `${Date.now()}-${fileId.slice(-8)}${ext || '.jpg'}`;
+        const localPath = path.join(imagesDir, filename);
+        await writeFile(localPath, buffer);
+        
+        images.push({
+          id: fileId,
+          url: fileUrl,
+          path: localPath,
+          mimeType,
+          size: buffer.length,
+          filename,
+          base64,
+        });
+        
+        logger.info({ fileId, path: localPath, size: buffer.length }, 'Downloaded image');
+      } catch (err) {
+        logger.error({ err, fileId }, 'Failed to download image');
+      }
+    }
+
+    return images;
+  }
+
+  private setupHandlers(): void {
+    if (!this.bot || !this.config) return;
+
     // Auth middleware
     this.bot.use(async (ctx, next) => {
       const userId = ctx.from?.id;
       if (!userId) return;
 
-      // If allowedUsers is set, enforce it
-      if (this.config.allowedUsers && this.config.allowedUsers.length > 0) {
-        if (!this.config.allowedUsers.includes(userId)) {
+      if (this.config!.allowedUsers && this.config!.allowedUsers.length > 0) {
+        if (!this.config!.allowedUsers.includes(userId)) {
           logger.warn({ userId }, 'Unauthorized user attempted access');
           await ctx.reply('🚫 Unauthorized. Contact admin for access.');
           return;
@@ -60,164 +200,172 @@ export class TelegramChannel {
 
     // Handle text messages
     this.bot.on('text', async (ctx) => {
-      const userId = ctx.from.id;
-      const text = ctx.message.text;
-      const messageId = ctx.message.message_id;
+      const message: ChannelMessage = {
+        id: String(ctx.message.message_id),
+        userId: String(ctx.from.id),
+        username: ctx.from.username,
+        text: ctx.message.text,
+        timestamp: new Date(ctx.message.date * 1000),
+        metadata: {
+          chatId: ctx.chat.id,
+          chatType: ctx.chat.type,
+        },
+      };
 
-      logger.info({ userId, text: text.slice(0, 50) }, 'Received message');
+      logger.info({ userId: message.userId, text: message.text.slice(0, 50) }, 'Received message');
 
       try {
-        // Get or create conversation history
-        const history = this.conversationHistory.get(userId) || [];
-        
-        // Add user message
-        history.push({ role: 'user', content: text });
+        await ctx.sendChatAction('typing');
 
-        // Keep history manageable (last 20 messages)
-        if (history.length > 20) {
-          history.splice(0, history.length - 20);
-        }
-
-        // Build context from memory
-        const memoryContext = await memory.buildContext();
-        
-        // Build knowledge context if we have an active product
-        let knowledgeContext = '';
-        const state = await memory.getState();
-        if (state.activeProduct) {
-          try {
-            // Initialize knowledge with OpenAI key if available
-            if (process.env.OPENAI_API_KEY) {
-              await knowledge.init(process.env.OPENAI_API_KEY);
-              knowledgeContext = await knowledge.buildContext(state.activeProduct, text, 3000);
-            }
-          } catch (err) {
-            logger.warn({ err, productId: state.activeProduct }, 'Failed to build knowledge context');
-          }
-        }
-        
-        // Build full system prompt
-        const fullSystemPrompt = knowledgeContext 
-          ? `${this.systemPrompt}\n\n# Memory Context\n${memoryContext}\n\n# Product Knowledge\n${knowledgeContext}`
-          : `${this.systemPrompt}\n\n# Memory Context\n${memoryContext}`;
-
-        // Get active provider
-        const provider = providers.getActive();
-        if (!provider) {
-          await ctx.reply('⚠️ No AI provider configured. Run setup first.');
+        // Get message handler from registry
+        const handler = channelRegistry.getMessageHandler();
+        if (!handler) {
+          await ctx.reply('⚠️ Agent not configured.');
           return;
         }
 
-        // Show typing indicator
-        await ctx.sendChatAction('typing');
-
-        // Get tool definitions
-        const tools = toolRegistry.getDefinitions();
-
-        // Tool loop - keep going until we get a final response
-        let finalResponse = '';
-        let iterations = 0;
-        const maxIterations = 10;
-
-        while (iterations < maxIterations) {
-          iterations++;
-
-          const response = await provider.complete({
-            messages: history,
-            systemPrompt: fullSystemPrompt,
-            tools: tools.length > 0 ? tools : undefined,
+        const response = await handler(this, message);
+        
+        if (response) {
+          await this.send(message.userId, {
+            ...response,
+            replyToId: message.id,
           });
-
-          // If no tool calls, we have our final response
-          if (!response.toolCalls || response.toolCalls.length === 0) {
-            finalResponse = response.content;
-            history.push({ role: 'assistant', content: response.content });
-            break;
-          }
-
-          // Handle tool calls
-          logger.info({ toolCalls: response.toolCalls.map(t => t.name) }, 'Executing tools');
-
-          // Add assistant message with tool calls
-          history.push({
-            role: 'assistant',
-            content: response.content || '',
-            toolCalls: response.toolCalls,
-          });
-
-          // Execute each tool and add results
-          for (const toolCall of response.toolCalls) {
-            await ctx.sendChatAction('typing');
-            
-            const result = await toolRegistry.execute(toolCall.name, toolCall.arguments);
-            logger.info({ tool: toolCall.name, success: result.success }, 'Tool executed');
-
-            // Check for SEND_IMAGE directive
-            if (result.message?.startsWith('SEND_IMAGE:')) {
-              const imagePath = result.message.replace('SEND_IMAGE:', '');
-              try {
-                await ctx.sendChatAction('upload_photo');
-                await ctx.replyWithPhoto({ source: imagePath });
-                result.message = `Image sent: ${imagePath}`;
-              } catch (imgErr) {
-                logger.error({ err: imgErr, imagePath }, 'Failed to send image');
-                result.message = `Image generated at ${imagePath} but failed to send: ${imgErr}`;
-              }
-            }
-
-            history.push({
-              role: 'tool',
-              content: JSON.stringify(result),
-              toolCallId: toolCall.id,
-            });
-          }
         }
-
-        if (!finalResponse && iterations >= maxIterations) {
-          finalResponse = '⚠️ Reached maximum tool iterations. Please try a simpler request.';
-        }
-
-        this.conversationHistory.set(userId, history);
-
-        // Log to session
-        await memory.appendToSession(`telegram-${userId}`, {
-          role: 'user',
-          content: text,
-          messageId,
-        });
-        await memory.appendToSession(`telegram-${userId}`, {
-          role: 'assistant',
-          content: finalResponse,
-        });
-
-        // Send response with fallback for Markdown errors
-        if (finalResponse) {
-          try {
-            await ctx.reply(finalResponse, {
-              reply_parameters: { message_id: messageId },
-              parse_mode: 'Markdown',
-            });
-          } catch (sendErr: any) {
-            // If Markdown parsing fails, try without parse_mode
-            if (sendErr?.response?.description?.includes("parse entities")) {
-              logger.warn('Markdown parse failed, retrying without formatting');
-              await ctx.reply(finalResponse, {
-                reply_parameters: { message_id: messageId },
-              });
-            } else {
-              throw sendErr;
-            }
-          }
-        }
-
-        logger.info({ userId, iterations }, 'Sent response');
       } catch (error) {
-        logger.error({ error, userId }, 'Error processing message');
+        logger.error({ error, userId: message.userId }, 'Error processing message');
         await ctx.reply('❌ Error processing your message. Please try again.');
       }
     });
 
-    // Handle /start command
+    // Handle photo messages
+    this.bot.on('photo', async (ctx) => {
+      const photos = ctx.message.photo;
+      // Get highest resolution photo (last in array)
+      const photo = photos[photos.length - 1];
+      const caption = ctx.message.caption || '';
+
+      try {
+        await ctx.sendChatAction('typing');
+
+        // Download the image
+        const images = await this.downloadTelegramImages(ctx, [photo.file_id]);
+
+        const message: ChannelMessage = {
+          id: String(ctx.message.message_id),
+          userId: String(ctx.from.id),
+          username: ctx.from.username,
+          text: caption || '[Image attached]',
+          timestamp: new Date(ctx.message.date * 1000),
+          images,
+          metadata: {
+            chatId: ctx.chat.id,
+            chatType: ctx.chat.type,
+            hasImage: true,
+          },
+        };
+
+        logger.info({ userId: message.userId, hasImage: true, caption: caption.slice(0, 50) }, 'Received photo message');
+
+        const handler = channelRegistry.getMessageHandler();
+        if (!handler) {
+          await ctx.reply('⚠️ Agent not configured.');
+          return;
+        }
+
+        const response = await handler(this, message);
+        if (response) {
+          await this.send(message.userId, {
+            ...response,
+            replyToId: message.id,
+          });
+        }
+      } catch (error) {
+        logger.error({ error, userId: ctx.from.id }, 'Error processing photo message');
+        await ctx.reply('❌ Error processing your image. Please try again.');
+      }
+    });
+
+    // Handle document/file messages (for images sent as files)
+    this.bot.on('document', async (ctx) => {
+      const doc = ctx.message.document;
+      const mimeType = doc.mime_type || '';
+      
+      // Only handle image documents
+      if (!mimeType.startsWith('image/')) {
+        return;
+      }
+
+      const caption = ctx.message.caption || '';
+
+      try {
+        await ctx.sendChatAction('typing');
+
+        const images = await this.downloadTelegramImages(ctx, [doc.file_id]);
+
+        const message: ChannelMessage = {
+          id: String(ctx.message.message_id),
+          userId: String(ctx.from.id),
+          username: ctx.from.username,
+          text: caption || '[Image attached]',
+          timestamp: new Date(ctx.message.date * 1000),
+          images,
+          metadata: {
+            chatId: ctx.chat.id,
+            chatType: ctx.chat.type,
+            hasImage: true,
+            filename: doc.file_name,
+          },
+        };
+
+        logger.info({ userId: message.userId, hasImage: true, filename: doc.file_name }, 'Received document image');
+
+        const handler = channelRegistry.getMessageHandler();
+        if (!handler) {
+          await ctx.reply('⚠️ Agent not configured.');
+          return;
+        }
+
+        const response = await handler(this, message);
+        if (response) {
+          await this.send(message.userId, {
+            ...response,
+            replyToId: message.id,
+          });
+        }
+      } catch (error) {
+        logger.error({ error, userId: ctx.from.id }, 'Error processing document');
+        await ctx.reply('❌ Error processing your image. Please try again.');
+      }
+    });
+
+    // Handle callback queries (button clicks)
+    this.bot.on('callback_query', async (ctx) => {
+      if (!('data' in ctx.callbackQuery)) return;
+      
+      const message: ChannelMessage = {
+        id: String(ctx.callbackQuery.id),
+        userId: String(ctx.from.id),
+        username: ctx.from.username,
+        text: ctx.callbackQuery.data,
+        timestamp: new Date(),
+        metadata: {
+          isCallback: true,
+        },
+      };
+
+      await ctx.answerCbQuery();
+
+      const handler = channelRegistry.getMessageHandler();
+      if (handler) {
+        const response = await handler(this, message);
+        if (response) {
+          await this.send(message.userId, response);
+        }
+      }
+    });
+
+    // Built-in commands
     this.bot.command('start', async (ctx) => {
       await ctx.reply(
         '🦀 **MarketClaw** — Your AI Marketing Agent\n\n' +
@@ -226,76 +374,24 @@ export class TelegramChannel {
         '• Manage campaigns\n' +
         '• Post to social media\n' +
         '• Track performance\n\n' +
-        'Commands:\n' +
-        '/products — List products\n' +
-        '/campaigns — List campaigns\n' +
-        '/post — Create a post\n' +
-        '/help — Show help',
+        'Just chat with me naturally!',
         { parse_mode: 'Markdown' }
       );
     });
 
-    // Handle /products command
-    this.bot.command('products', async (ctx) => {
-      const products = await memory.listProducts();
-      if (products.length === 0) {
-        await ctx.reply('No products configured yet. Tell me about a product to add it!');
-        return;
-      }
-
-      const list = products.map(p => `• **${p.name}**: ${p.tagline || p.description.slice(0, 50)}`).join('\n');
-      await ctx.reply(`📦 **Products**\n\n${list}`, { parse_mode: 'Markdown' });
-    });
-
-    // Handle /campaigns command
-    this.bot.command('campaigns', async (ctx) => {
-      const campaigns = await memory.listCampaigns();
-      if (campaigns.length === 0) {
-        await ctx.reply('No campaigns yet. Say "start a campaign for [product]" to begin!');
-        return;
-      }
-
-      const list = campaigns.map(c => {
-        const status = { draft: '📝', active: '🚀', paused: '⏸️', completed: '✅' }[c.status];
-        return `${status} **${c.name}**: ${c.posts.length} posts`;
-      }).join('\n');
-      await ctx.reply(`📊 **Campaigns**\n\n${list}`, { parse_mode: 'Markdown' });
-    });
-
-    // Handle /help command
     this.bot.command('help', async (ctx) => {
       await ctx.reply(
         '🦀 **MarketClaw Help**\n\n' +
-        '**Commands:**\n' +
-        '/start — Welcome message\n' +
-        '/products — List products\n' +
-        '/campaigns — List campaigns\n' +
-        '/post — Create a post\n' +
-        '/status — Check bot status\n\n' +
-        '**Natural Language:**\n' +
+        '**Just talk to me:**\n' +
         '• "Add product: [name] - [description]"\n' +
         '• "Create a Twitter post for [product]"\n' +
-        '• "Start a launch campaign for [product]"\n' +
-        '• "What posts are scheduled?"\n' +
-        '• "Show me analytics for [campaign]"',
-        { parse_mode: 'Markdown' }
-      );
-    });
-
-    // Handle /status command
-    this.bot.command('status', async (ctx) => {
-      const provider = providers.getActive();
-      const state = await memory.getState();
-      const products = await memory.listProducts();
-      const campaigns = await memory.listCampaigns();
-
-      await ctx.reply(
-        '🦀 **MarketClaw Status**\n\n' +
-        `**Provider:** ${provider?.name || 'None'} (${provider?.currentModel() || 'N/A'})\n` +
-        `**Products:** ${products.length}\n` +
-        `**Campaigns:** ${campaigns.length}\n` +
-        `**Active Product:** ${state.activeProduct || 'None'}\n` +
-        `**Active Campaign:** ${state.activeCampaign || 'None'}`,
+        '• "Start a launch campaign"\n' +
+        '• "Show me my leads"\n' +
+        '• "Send an email to [contact]"\n\n' +
+        '**Commands:**\n' +
+        '/start — Welcome\n' +
+        '/help — This message\n' +
+        '/status — Bot status',
         { parse_mode: 'Markdown' }
       );
     });
@@ -304,27 +400,9 @@ export class TelegramChannel {
     this.bot.catch((err, ctx) => {
       logger.error({ err, updateType: ctx.updateType }, 'Bot error');
     });
-
-    // Start polling
-    await this.bot.launch();
-    logger.info('Telegram bot started');
-
-    // Graceful shutdown
-    process.once('SIGINT', () => this.bot.stop('SIGINT'));
-    process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
-  }
-
-  /**
-   * Stop the bot
-   */
-  stop(): void {
-    this.bot.stop();
-  }
-
-  /**
-   * Send a message to a user
-   */
-  async sendMessage(userId: number, message: string): Promise<void> {
-    await this.bot.telegram.sendMessage(userId, message, { parse_mode: 'Markdown' });
   }
 }
+
+// Create and register the channel
+export const telegramChannel = new TelegramChannel();
+channelRegistry.register(telegramChannel);

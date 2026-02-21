@@ -40,7 +40,20 @@ The setup wizard (`npx tsx src/cli.ts setup`) guides you through configuration:
 - Add your Telegram user ID to limit who can use the bot
 - Find your ID via [@userinfobot](https://t.me/userinfobot)
 
-### 2. AI Provider
+### 2. Agent Identity
+
+Give your agent a personality:
+
+- **Name** — What the agent calls itself (default: MarketClaw)
+- **Emoji** — Signature emoji (default: 🦀)
+- **Voice** — Communication style:
+  - `professional` — Formal, polished
+  - `casual` — Relaxed, conversational
+  - `friendly` — Warm, approachable (default)
+  - `playful` — Fun, energetic
+- **Persona** — Optional description (e.g., "your friendly growth hacker")
+
+### 3. AI Provider
 
 Choose one:
 
@@ -55,7 +68,7 @@ Choose one:
 
 See [PROVIDERS.md](./PROVIDERS.md) for detailed provider setup.
 
-### 3. Marketing Integrations (Optional)
+### 4. Marketing Integrations (Optional)
 
 Add these later via `marketclaw config` or environment variables:
 
@@ -104,9 +117,33 @@ providers:
 
 agent:
   name: MarketClaw
-  systemPrompt: |
-    You are a marketing assistant...
+  emoji: 🦀
+  voice: friendly          # professional, casual, friendly, playful
+  persona: your friendly marketing assistant
 ```
+
+## Team Setup
+
+After initial setup, the first user (with `adminUsers` Telegram ID) becomes the admin. Add team members via chat:
+
+```
+You: Add @jane (telegram: 123456789) as a creator
+
+Bot: ✅ Added Jane to the team (creator)
+```
+
+Or edit `~/.marketclaw/workspace/team.json` directly. See [Team Management](./TEAM.md) for details.
+
+### Role Overview
+
+| Role | Can Post | Can Approve | Can Create | Admin |
+|------|:--------:|:-----------:|:----------:|:-----:|
+| Admin | ✓ | ✓ | ✓ | ✓ |
+| Manager | ✓ | ✓ | ✓ | |
+| Creator | | | ✓ | |
+| Viewer | | | | |
+
+Creators must request approval before content is posted. See [Approvals](./APPROVALS.md).
 
 ## Verify Installation
 

@@ -99,9 +99,36 @@ export class AnthropicProvider implements Provider {
         }
         messages.push({ role: 'assistant', content });
       } else {
+        // Handle content that may include images
+        let content: any;
+        
+        if (typeof m.content === 'string') {
+          content = m.content;
+        } else if (Array.isArray(m.content)) {
+          // Mixed content (text + images)
+          content = m.content.map(part => {
+            if (part.type === 'text') {
+              return { type: 'text', text: part.text };
+            } else if (part.type === 'image') {
+              // Anthropic image format
+              return {
+                type: 'image',
+                source: {
+                  type: part.source.type,
+                  media_type: part.source.mediaType || 'image/jpeg',
+                  data: part.source.data,
+                },
+              };
+            }
+            return part;
+          });
+        } else {
+          content = m.content;
+        }
+        
         messages.push({
           role: m.role as 'user' | 'assistant',
-          content: m.content,
+          content,
         });
       }
     }

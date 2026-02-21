@@ -75,9 +75,43 @@ export class OpenAIProvider implements Provider {
           })),
         });
       } else if (m.role === 'user' || m.role === 'assistant') {
+        // Handle content that may include images
+        let content: any;
+        
+        if (typeof m.content === 'string') {
+          content = m.content;
+        } else if (Array.isArray(m.content)) {
+          // Mixed content (text + images) - convert to OpenAI format
+          content = m.content.map(part => {
+            if (part.type === 'text') {
+              return { type: 'text', text: part.text };
+            } else if (part.type === 'image') {
+              // OpenAI image format
+              if (part.source.type === 'base64') {
+                return {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${part.source.mediaType || 'image/jpeg'};base64,${part.source.data}`,
+                  },
+                };
+              } else {
+                return {
+                  type: 'image_url',
+                  image_url: {
+                    url: part.source.url,
+                  },
+                };
+              }
+            }
+            return part;
+          });
+        } else {
+          content = m.content;
+        }
+        
         messages.push({
           role: m.role,
-          content: m.content,
+          content,
         });
       }
     }

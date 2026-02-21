@@ -1,11 +1,19 @@
 /**
- * Channel Registry
- * Inspired by ZeroClaw's trait-driven channel architecture
+ * Channels Index
+ * Exports channel registry and all available channels
  */
 
-export * from './telegram.js';
+export * from './types.js';
+export * from './registry.js';
 
-// Future channels:
-// export * from './discord.js';
-// export * from './slack.js';
-// export * from './cli.js';
+// Import channels to register them
+import './telegram.js';
+import './discord.js';
+import './slack.js';
+import './cli.js';
+
+// Re-export for direct access
+export { telegramChannel } from './telegram.js';
+export { discordChannel } from './discord.js';
+export { slackChannel } from './slack.js';
+export { cliChannel } from './cli.js';
