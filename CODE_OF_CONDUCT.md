@@ -14,31 +14,31 @@ diverse, inclusive, and healthy community.
 
 ## Our Standards
 
-Examples of behavior that contributes to a positive environment:
+**Examples of behavior that contributes to a positive environment:**
 
-* Being respectful and inclusive
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing when we make mistakes
-* Focusing on what is best for the community
-* Showing empathy towards others
+- Using welcoming and inclusive language
+- Being respectful of differing viewpoints and experiences
+- Gracefully accepting constructive criticism
+- Focusing on what is best for the community
+- Showing empathy towards other community members
 
-Examples of unacceptable behavior:
+**Examples of unacceptable behavior:**
 
-* Trolling, insulting or derogatory comments, and personal attacks
-* Harassment of any kind
-* Publishing others' private information without permission
-* Other conduct which could reasonably be considered inappropriate
+- Trolling, insulting/derogatory comments, and personal or political attacks
+- Public or private harassment
+- Publishing others' private information without explicit permission
+- Other conduct which could reasonably be considered inappropriate
 
 ## Enforcement
 
-Community leaders are responsible for clarifying and enforcing our standards.
-
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers at **brett@oneway.co.nz**.
+reported to the project maintainers. All complaints will be reviewed and
+investigated promptly and fairly.
 
-All complaints will be reviewed and investigated promptly and fairly.
+Project maintainers have the right and responsibility to remove, edit, or reject
+comments, commits, code, wiki edits, issues, and other contributions that are
+not aligned with this Code of Conduct.
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/),
-version 2.0.
+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.0.
