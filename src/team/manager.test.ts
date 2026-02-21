@@ -182,14 +182,20 @@ describe('TeamManager', () => {
     });
 
     it('should include inactive members when requested', async () => {
-      const member = teamManager.findMember({ telegramId: 12345 });
-      await teamManager.suspendMember(member!.id);
+      // Add a non-admin member to suspend (can't suspend the last admin)
+      const newMember = await teamManager.addMember({
+        telegramId: 99999,
+        name: 'Test User',
+        defaultRole: 'viewer',
+        addedBy: 'admin',
+      });
+      await teamManager.suspendMember(newMember.id);
       
       const active = teamManager.listMembers(false);
       const allActive = active.every(m => m.status === 'active');
       
       const all = teamManager.listMembers(true);
-      expect(all.length).toBeGreaterThanOrEqual(active.length);
+      expect(all.length).toBeGreaterThan(active.length);
     });
   });
 
@@ -302,13 +308,16 @@ describe('TeamManager', () => {
     });
 
     it('should return false for suspended member', async () => {
-      const member = teamManager.findMember({ telegramId: 12345 })!;
-      await teamManager.suspendMember(member.id);
+      // Add a non-admin member to suspend (can't suspend the last admin)
+      const newMember = await teamManager.addMember({
+        telegramId: 77777,
+        name: 'Suspendable User',
+        defaultRole: 'manager',
+        addedBy: 'admin',
+      });
+      await teamManager.suspendMember(newMember.id);
       
-      expect(teamManager.checkPermission({ telegramId: 12345 }, 'admin')).toBe(false);
-      
-      // Reactivate for other tests
-      await teamManager.activateMember(member.id);
+      expect(teamManager.checkPermission({ telegramId: 77777 }, 'manage_products')).toBe(false);
     });
 
     it('should check permission for specific product', async () => {
@@ -460,10 +469,23 @@ describe('TeamManager', () => {
     });
 
     it('should assign default role', async () => {
-      const member = teamManager.findMember({ telegramId: 12345 })!;
-      const updated = await teamManager.assignDefaultRole(member.id, 'creator');
+      // Add a non-admin member to reassign (can't demote the last admin)
+      const newMember = await teamManager.addMember({
+        telegramId: 88888,
+        name: 'Role Test User',
+        defaultRole: 'manager',
+        addedBy: 'admin',
+      });
+      const updated = await teamManager.assignDefaultRole(newMember.id, 'creator');
       
       expect(updated!.defaultRole).toBe('creator');
+    });
+
+    it('should prevent demoting the last admin', async () => {
+      const admin = teamManager.findMember({ telegramId: 12345 })!;
+      
+      await expect(teamManager.assignDefaultRole(admin.id, 'creator'))
+        .rejects.toThrow('Cannot demote the last admin');
     });
   });
 
@@ -538,6 +560,13 @@ describe('TeamManager', () => {
       const result = await teamManager.removeMember('nonexistent');
       expect(result).toBe(false);
     });
+
+    it('should prevent removing the last admin', async () => {
+      const admin = teamManager.findMember({ telegramId: 12345 })!;
+      
+      await expect(teamManager.removeMember(admin.id))
+        .rejects.toThrow('Cannot remove the last admin');
+    });
   });
 
   describe('suspendMember and activateMember', () => {
@@ -569,6 +598,13 @@ describe('TeamManager', () => {
       const updated = await teamManager.activateMember(member.id);
       
       expect(updated!.status).toBe('active');
+    });
+
+    it('should prevent suspending the last admin', async () => {
+      const admin = teamManager.findMember({ telegramId: 12345 })!;
+      
+      await expect(teamManager.suspendMember(admin.id))
+        .rejects.toThrow('Cannot suspend the last admin');
     });
   });
 

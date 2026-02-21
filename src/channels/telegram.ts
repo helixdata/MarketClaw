@@ -4,8 +4,9 @@
  */
 
 import { Telegraf } from 'telegraf';
-import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, MessageHandler } from './types.js';
+import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, ChannelDocument, MessageHandler } from './types.js';
 import { channelRegistry } from './registry.js';
+import { documentParser } from '../documents/index.js';
 import pino from 'pino';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -179,6 +180,38 @@ export class TelegramChannel implements Channel {
     return images;
   }
 
+  /**
+   * Download and parse documents from Telegram
+   */
+  private async downloadTelegramDocument(ctx: any, fileId: string, filename: string, mimeType: string): Promise<ChannelDocument | null> {
+    try {
+      // Get file info from Telegram
+      const file = await ctx.telegram.getFile(fileId);
+      const fileUrl = `https://api.telegram.org/file/bot${this.config!.botToken || process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+      
+      // Download the file
+      const response = await fetch(fileUrl);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Parse the document
+      const parsed = await documentParser.parseDocument(buffer, filename, mimeType);
+      
+      logger.info({ fileId, filename, wordCount: parsed.wordCount }, 'Parsed document');
+      
+      return {
+        id: parsed.id,
+        filename: parsed.filename,
+        mimeType: parsed.mimeType,
+        text: parsed.text,
+        pageCount: parsed.pageCount,
+        wordCount: parsed.wordCount,
+      };
+    } catch (err) {
+      logger.error({ err, fileId, filename }, 'Failed to download/parse document');
+      return null;
+    }
+  }
+
   private setupHandlers(): void {
     if (!this.bot || !this.config) return;
 
@@ -286,39 +319,71 @@ export class TelegramChannel implements Channel {
       }
     });
 
-    // Handle document/file messages (for images sent as files)
+    // Handle document/file messages (images or documents)
     this.bot.on('document', async (ctx) => {
       const doc = ctx.message.document;
       const mimeType = doc.mime_type || '';
-      
-      // Only handle image documents
-      if (!mimeType.startsWith('image/')) {
-        return;
-      }
-
+      const filename = doc.file_name || 'document';
       const caption = ctx.message.caption || '';
 
       try {
         await ctx.sendChatAction('typing');
 
-        const images = await this.downloadTelegramImages(ctx, [doc.file_id]);
+        let images: ChannelImage[] = [];
+        let documents: ChannelDocument[] = [];
+
+        // Handle image documents
+        if (mimeType.startsWith('image/')) {
+          images = await this.downloadTelegramImages(ctx, [doc.file_id]);
+        }
+        // Handle supported document types (PDF, Word, etc.)
+        else if (documentParser.isSupportedDocumentByFilename(mimeType, filename)) {
+          const parsed = await this.downloadTelegramDocument(ctx, doc.file_id, filename, mimeType);
+          if (parsed) {
+            documents.push(parsed);
+          }
+        }
+        else {
+          // Unsupported file type
+          await ctx.reply(`⚠️ Unsupported file type: ${mimeType || 'unknown'}. I can read PDF, Word (.docx/.doc), and text files.`);
+          return;
+        }
+
+        // Build text content including document text
+        let text = caption;
+        if (documents.length > 0) {
+          const docInfo = documents.map(d => 
+            `[Document: ${d.filename}${d.pageCount ? ` (${d.pageCount} pages)` : ''}, ${d.wordCount} words]\n\n${d.text}`
+          ).join('\n\n---\n\n');
+          text = text ? `${text}\n\n${docInfo}` : docInfo;
+        }
+        if (!text && images.length > 0) {
+          text = '[Image attached]';
+        }
 
         const message: ChannelMessage = {
           id: String(ctx.message.message_id),
           userId: String(ctx.from.id),
           username: ctx.from.username,
-          text: caption || '[Image attached]',
+          text,
           timestamp: new Date(ctx.message.date * 1000),
-          images,
+          images: images.length > 0 ? images : undefined,
+          documents: documents.length > 0 ? documents : undefined,
           metadata: {
             chatId: ctx.chat.id,
             chatType: ctx.chat.type,
-            hasImage: true,
-            filename: doc.file_name,
+            hasImage: images.length > 0,
+            hasDocument: documents.length > 0,
+            filename,
           },
         };
 
-        logger.info({ userId: message.userId, hasImage: true, filename: doc.file_name }, 'Received document image');
+        logger.info({ 
+          userId: message.userId, 
+          hasImage: images.length > 0, 
+          hasDocument: documents.length > 0,
+          filename 
+        }, 'Received document');
 
         const handler = channelRegistry.getMessageHandler();
         if (!handler) {
@@ -335,7 +400,7 @@ export class TelegramChannel implements Channel {
         }
       } catch (error) {
         logger.error({ error, userId: ctx.from.id }, 'Error processing document');
-        await ctx.reply('❌ Error processing your image. Please try again.');
+        await ctx.reply('❌ Error processing your file. Please try again.');
       }
     });
 

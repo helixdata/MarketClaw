@@ -230,6 +230,26 @@ class TeamManager {
    * Assign default role to member
    */
   async assignDefaultRole(memberId: string, role: string): Promise<TeamMember | undefined> {
+    if (!this.team) return undefined;
+
+    const member = this.getMember(memberId);
+    if (!member) return undefined;
+
+    // Prevent demoting the last admin
+    const wasAdmin = member.defaultRole === 'admin' || member.permissions?.includes('admin');
+    const willBeAdmin = role === 'admin';
+    
+    if (wasAdmin && !willBeAdmin) {
+      const adminCount = this.team.members.filter(m => 
+        m.status === 'active' && 
+        (m.defaultRole === 'admin' || m.permissions?.includes('admin'))
+      ).length;
+      
+      if (adminCount <= 1) {
+        throw new Error('Cannot demote the last admin. Assign another admin first.');
+      }
+    }
+
     return this.updateMember(memberId, { defaultRole: role });
   }
 
@@ -265,6 +285,20 @@ class TeamManager {
     const idx = this.team.members.findIndex(m => m.id === id);
     if (idx < 0) return false;
 
+    const member = this.team.members[idx];
+    
+    // Prevent removing the last admin
+    if (member.defaultRole === 'admin' || member.permissions?.includes('admin')) {
+      const adminCount = this.team.members.filter(m => 
+        m.status === 'active' && 
+        (m.defaultRole === 'admin' || m.permissions?.includes('admin'))
+      ).length;
+      
+      if (adminCount <= 1) {
+        throw new Error('Cannot remove the last admin. Assign another admin first.');
+      }
+    }
+
     this.team.members.splice(idx, 1);
     await this.save();
 
@@ -276,6 +310,23 @@ class TeamManager {
    * Suspend member
    */
   async suspendMember(id: string): Promise<TeamMember | undefined> {
+    if (!this.team) return undefined;
+
+    const member = this.getMember(id);
+    if (!member) return undefined;
+
+    // Prevent suspending the last admin
+    if (member.defaultRole === 'admin' || member.permissions?.includes('admin')) {
+      const activeAdminCount = this.team.members.filter(m => 
+        m.status === 'active' && 
+        (m.defaultRole === 'admin' || m.permissions?.includes('admin'))
+      ).length;
+      
+      if (activeAdminCount <= 1) {
+        throw new Error('Cannot suspend the last admin. Assign another admin first.');
+      }
+    }
+
     return this.updateMember(id, { status: 'suspended' });
   }
 

@@ -72,6 +72,7 @@ Use any AI provider:
 - **Knowledge base** — Store product info, search with embeddings
 - **Brand identity** — Colors, voice, taglines, typography per product
 - **Image library** — Store, tag, and search product images
+- **Document reading** — Extract text from PDF, Word (.docx/.doc), and text files
 - **Web search** — Search the web with Brave API, extract content from URLs
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
@@ -416,11 +417,16 @@ marketclaw config
 - [x] Product image library
 - [x] Vision/image support
 - [x] Web search & research tools
+- [ ] Google Calendar integration
+- [ ] Notion integration
+- [ ] Google Ads integration
+- [ ] Content templates
+- [ ] Audience personas
+- [ ] Competitor monitoring
 - [ ] Skills/Marketplace
 - [ ] Microsoft Teams channel
-- [ ] Web dashboard
 - [ ] Analytics dashboard
-- [ ] Automated posting
+- [ ] Web dashboard
 
 ---
 

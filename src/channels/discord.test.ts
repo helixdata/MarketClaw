@@ -133,6 +133,36 @@ vi.mock('./registry.js', () => ({
   },
 }));
 
+// Mock document parser
+vi.mock('../documents/index.js', () => ({
+  documentParser: {
+    parseDocument: vi.fn().mockResolvedValue({
+      id: 'doc_test_123',
+      filename: 'test.pdf',
+      mimeType: 'application/pdf',
+      text: 'Sample document text content.',
+      pageCount: 3,
+      wordCount: 5,
+      extractedAt: Date.now(),
+    }),
+    isSupportedDocument: vi.fn().mockImplementation((mimeType: string) => {
+      return ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'].includes(mimeType);
+    }),
+    isSupportedDocumentByFilename: vi.fn().mockImplementation((mimeType: string, filename: string) => {
+      const supportedMimes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'];
+      if (supportedMimes.includes(mimeType)) return true;
+      const ext = filename.toLowerCase().split('.').pop();
+      return ['pdf', 'docx', 'doc', 'txt'].includes(ext || '');
+    }),
+    getSupportedMimeTypes: vi.fn().mockReturnValue([
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'text/plain',
+    ]),
+  },
+}));
+
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
@@ -727,7 +757,7 @@ describe('DiscordChannel', () => {
       );
     });
 
-    it('should filter out non-image attachments', async () => {
+    it('should process text file attachments as documents', async () => {
       const textAttachment = {
         id: 'attach-txt',
         url: 'https://cdn.discord.com/attachments/123/456/file.txt',
@@ -746,11 +776,44 @@ describe('DiscordChannel', () => {
       const handlers = getClientHandlers();
       await handlers[Events.MessageCreate](mockMessage);
 
+      // Text files are now processed as documents
+      expect(mockFetch).toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          documents: expect.any(Array),
+          metadata: expect.objectContaining({
+            hasDocument: true,
+          }),
+        })
+      );
+    });
+
+    it('should filter out truly unsupported attachments', async () => {
+      const zipAttachment = {
+        id: 'attach-zip',
+        url: 'https://cdn.discord.com/attachments/123/456/file.zip',
+        name: 'file.zip',
+        contentType: 'application/zip',
+      };
+
+      const attachments = new MockCollection<string, any>();
+      attachments.set('attach-zip', zipAttachment);
+      mockMessage.attachments = attachments;
+      mockMessage.content = `<@${mockBotUser.id}> file`;
+
+      const mockHandler = vi.fn().mockResolvedValue({ text: 'Response' });
+      vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(mockHandler);
+
+      const handlers = getClientHandlers();
+      await handlers[Events.MessageCreate](mockMessage);
+
       expect(mockFetch).not.toHaveBeenCalled();
       expect(mockHandler).toHaveBeenCalledWith(
         channel,
         expect.objectContaining({
           images: undefined,
+          documents: undefined,
         })
       );
     });

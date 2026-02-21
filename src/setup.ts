@@ -343,6 +343,29 @@ export async function runSetup(): Promise<void> {
   console.log(chalk.gray('Skip any you don\'t need - you can add them later.'));
   console.log();
 
+  // Brave Search is highly recommended - prompt first
+  console.log(chalk.white.bold('🔍 Web Search (Recommended)'));
+  console.log(chalk.gray('Web search lets MarketClaw research competitors, find trends, and gather intel.'));
+  console.log();
+  
+  const existingBrave = config.web?.braveApiKey || process.env.BRAVE_SEARCH_API_KEY;
+  if (existingBrave) {
+    console.log(chalk.green('✓ Brave Search already configured'));
+  } else {
+    console.log('Get a free API key at: ' + chalk.cyan('https://brave.com/search/api/'));
+    info('Free tier: 2,000 queries/month');
+    console.log();
+    
+    const braveKey = await question(chalk.cyan('Brave Search API Key (or Enter to skip): '));
+    if (braveKey.trim()) {
+      config.web = { ...config.web, braveApiKey: braveKey.trim() };
+      success('Brave Search configured');
+    } else {
+      warn('Skipped - you can add BRAVE_SEARCH_API_KEY later');
+    }
+  }
+  console.log();
+
   const integrations = [
     { name: 'Twitter/X', envVar: 'TWITTER_COOKIES', desc: 'Post tweets and threads' },
     { name: 'Resend', envVar: 'RESEND_API_KEY', desc: 'Send emails', url: 'https://resend.com' },

@@ -34,6 +34,29 @@ export interface ChannelImage {
   base64?: string;
 }
 
+/**
+ * Document attachment from a channel
+ */
+export interface ChannelDocument {
+  /** Unique identifier for the document */
+  id: string;
+  
+  /** Original filename */
+  filename: string;
+  
+  /** MIME type (application/pdf, etc.) */
+  mimeType: string;
+  
+  /** Extracted text content */
+  text: string;
+  
+  /** Number of pages (for PDFs) */
+  pageCount?: number;
+  
+  /** Word count of extracted text */
+  wordCount: number;
+}
+
 export interface ChannelMessage {
   id: string;
   userId: string;
@@ -45,6 +68,9 @@ export interface ChannelMessage {
   
   /** Images attached to the message */
   images?: ChannelImage[];
+  
+  /** Documents attached to the message (PDF, Word, etc.) */
+  documents?: ChannelDocument[];
 }
 
 export interface ChannelResponse {

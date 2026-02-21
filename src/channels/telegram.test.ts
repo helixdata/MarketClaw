@@ -49,6 +49,36 @@ vi.mock('./registry.js', () => ({
   },
 }));
 
+// Mock document parser
+vi.mock('../documents/index.js', () => ({
+  documentParser: {
+    parseDocument: vi.fn().mockResolvedValue({
+      id: 'doc_test_123',
+      filename: 'test.pdf',
+      mimeType: 'application/pdf',
+      text: 'Sample document text content.',
+      pageCount: 3,
+      wordCount: 5,
+      extractedAt: Date.now(),
+    }),
+    isSupportedDocument: vi.fn().mockImplementation((mimeType: string) => {
+      return ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'].includes(mimeType);
+    }),
+    isSupportedDocumentByFilename: vi.fn().mockImplementation((mimeType: string, filename: string) => {
+      const supportedMimes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'];
+      if (supportedMimes.includes(mimeType)) return true;
+      const ext = filename.toLowerCase().split('.').pop();
+      return ['pdf', 'docx', 'doc', 'txt'].includes(ext || '');
+    }),
+    getSupportedMimeTypes: vi.fn().mockReturnValue([
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'text/plain',
+    ]),
+  },
+}));
+
 import { TelegramChannel, TelegramConfig } from './telegram.js';
 import { Telegraf } from 'telegraf';
 import { channelRegistry } from './registry.js';
@@ -1012,7 +1042,7 @@ describe('TelegramChannel Image Support', () => {
       expect(mockHandler).toHaveBeenCalled();
     });
 
-    it('should ignore non-image documents (pdf)', async () => {
+    it('should process PDF documents', async () => {
       const ctx = createMockCtx({
         message: {
           message_id: 1,
@@ -1027,11 +1057,19 @@ describe('TelegramChannel Image Support', () => {
 
       await documentHandler!(ctx);
 
-      expect(ctx.telegram.getFile).not.toHaveBeenCalled();
-      expect(mockHandler).not.toHaveBeenCalled();
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('pdf-file-id');
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            hasDocument: true,
+          }),
+          documents: expect.any(Array),
+        })
+      );
     });
 
-    it('should ignore non-image documents (text)', async () => {
+    it('should process text documents', async () => {
       const ctx = createMockCtx({
         message: {
           message_id: 1,
@@ -1046,8 +1084,35 @@ describe('TelegramChannel Image Support', () => {
 
       await documentHandler!(ctx);
 
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('txt-file-id');
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            hasDocument: true,
+          }),
+        })
+      );
+    });
+
+    it('should ignore unsupported document types', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'zip-file-id',
+            mime_type: 'application/zip',
+            file_name: 'archive.zip',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
       expect(ctx.telegram.getFile).not.toHaveBeenCalled();
       expect(mockHandler).not.toHaveBeenCalled();
+      expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('Unsupported file type'));
     });
 
     it('should download and include in ChannelMessage.images', async () => {

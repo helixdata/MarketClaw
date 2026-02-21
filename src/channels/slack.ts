@@ -4,8 +4,9 @@
  */
 
 import { App, LogLevel } from '@slack/bolt';
-import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage } from './types.js';
+import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, ChannelDocument } from './types.js';
 import { channelRegistry } from './registry.js';
+import { documentParser } from '../documents/index.js';
 import pino from 'pino';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -244,6 +245,47 @@ export class SlackChannel implements Channel {
     }
   }
 
+  /**
+   * Download and parse document from Slack file
+   */
+  private async downloadSlackDocument(file: any): Promise<ChannelDocument | null> {
+    try {
+      const botToken = this.config?.botToken || process.env.SLACK_BOT_TOKEN;
+      
+      // Slack requires auth header to download files
+      const response = await fetch(file.url_private_download || file.url_private, {
+        headers: {
+          'Authorization': `Bearer ${botToken}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download: ${response.status}`);
+      }
+      
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const mimeType = file.mimetype || 'application/octet-stream';
+      const filename = file.name || 'document';
+      
+      // Parse the document
+      const parsed = await documentParser.parseDocument(buffer, filename, mimeType);
+      
+      logger.info({ fileId: file.id, filename, wordCount: parsed.wordCount }, 'Parsed Slack document');
+      
+      return {
+        id: parsed.id,
+        filename: parsed.filename,
+        mimeType: parsed.mimeType,
+        text: parsed.text,
+        pageCount: parsed.pageCount,
+        wordCount: parsed.wordCount,
+      };
+    } catch (err) {
+      logger.error({ err, fileId: file.id }, 'Failed to download/parse Slack document');
+      return null;
+    }
+  }
+
   private async handleMessage(
     event: { user: string; text: string; ts: string; channel: string; thread_ts?: string; files?: any[] },
     say: (msg: string | { text: string; thread_ts?: string }) => Promise<any>
@@ -263,10 +305,12 @@ export class SlackChannel implements Channel {
     }
 
     // Remove bot mention from text if present
-    const text = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
+    const rawText = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
     
     // Download any image files
     const images: ChannelImage[] = [];
+    const documents: ChannelDocument[] = [];
+    
     if (event.files && event.files.length > 0) {
       for (const file of event.files) {
         if (file.mimetype?.startsWith('image/')) {
@@ -276,27 +320,48 @@ export class SlackChannel implements Channel {
           } catch (err) {
             logger.error({ err, fileId: file.id }, 'Failed to download Slack image');
           }
+        } else if (documentParser.isSupportedDocumentByFilename(file.mimetype || '', file.name || '')) {
+          try {
+            const doc = await this.downloadSlackDocument(file);
+            if (doc) documents.push(doc);
+          } catch (err) {
+            logger.error({ err, fileId: file.id }, 'Failed to download Slack document');
+          }
         }
       }
     }
     
-    // Need either text or images to process
-    if (!text && images.length === 0) return;
+    // Build text content including document text
+    let text = rawText;
+    if (documents.length > 0) {
+      const docInfo = documents.map(d => 
+        `[Document: ${d.filename}${d.pageCount ? ` (${d.pageCount} pages)` : ''}, ${d.wordCount} words]\n\n${d.text}`
+      ).join('\n\n---\n\n');
+      text = text ? `${text}\n\n${docInfo}` : docInfo;
+    }
+    if (!text && images.length > 0) {
+      text = '[Image attached]';
+    }
+    
+    // Need either text, images, or documents to process
+    if (!text && images.length === 0 && documents.length === 0) return;
 
     const message: ChannelMessage = {
       id: event.ts,
       userId: event.user,
-      text: text || (images.length > 0 ? '[Image attached]' : ''),
+      text: text || '',
       timestamp: new Date(parseFloat(event.ts) * 1000),
       images: images.length > 0 ? images : undefined,
+      documents: documents.length > 0 ? documents : undefined,
       metadata: {
         channelId: event.channel,
         threadTs: event.thread_ts,
         hasImage: images.length > 0,
+        hasDocument: documents.length > 0,
       },
     };
 
-    logger.info({ userId: message.userId, text: message.text.slice(0, 50), imageCount: images.length }, 'Received Slack message');
+    logger.info({ userId: message.userId, text: message.text.slice(0, 50), imageCount: images.length, documentCount: documents.length }, 'Received Slack message');
 
     try {
       const handler = channelRegistry.getMessageHandler();

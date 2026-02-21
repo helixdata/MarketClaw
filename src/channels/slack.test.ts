@@ -57,6 +57,36 @@ vi.mock('./registry.js', () => ({
   },
 }));
 
+// Mock document parser
+vi.mock('../documents/index.js', () => ({
+  documentParser: {
+    parseDocument: vi.fn().mockResolvedValue({
+      id: 'doc_test_123',
+      filename: 'test.pdf',
+      mimeType: 'application/pdf',
+      text: 'Sample document text content.',
+      pageCount: 3,
+      wordCount: 5,
+      extractedAt: Date.now(),
+    }),
+    isSupportedDocument: vi.fn().mockImplementation((mimeType: string) => {
+      return ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'].includes(mimeType);
+    }),
+    isSupportedDocumentByFilename: vi.fn().mockImplementation((mimeType: string, filename: string) => {
+      const supportedMimes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'];
+      if (supportedMimes.includes(mimeType)) return true;
+      const ext = filename.toLowerCase().split('.').pop();
+      return ['pdf', 'docx', 'doc', 'txt'].includes(ext || '');
+    }),
+    getSupportedMimeTypes: vi.fn().mockReturnValue([
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'text/plain',
+    ]),
+  },
+}));
+
 // Mock fs/promises for image download tests
 vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
@@ -1090,8 +1120,8 @@ describe('SlackChannel', () => {
       );
     });
 
-    it('should skip non-image files', async () => {
-      const mockHandler = vi.fn().mockResolvedValue({ text: 'Text only' });
+    it('should process PDF files as documents', async () => {
+      const mockHandler = vi.fn().mockResolvedValue({ text: 'Got it!' });
       vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(mockHandler);
 
       const mockSay = vi.fn().mockResolvedValue({});
@@ -1105,6 +1135,39 @@ describe('SlackChannel', () => {
           name: 'document.pdf',
           mimetype: 'application/pdf',
           url_private: 'https://files.slack.com/files/document.pdf',
+        }],
+      };
+
+      await appMentionHandler({ event, say: mockSay });
+
+      // PDF files are now processed as documents
+      expect(mockFetch).toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          documents: expect.any(Array),
+          metadata: expect.objectContaining({
+            hasDocument: true,
+          }),
+        })
+      );
+    });
+
+    it('should skip unsupported files (e.g., zip)', async () => {
+      const mockHandler = vi.fn().mockResolvedValue({ text: 'Text only' });
+      vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(mockHandler);
+
+      const mockSay = vi.fn().mockResolvedValue({});
+      const event = {
+        user: 'U123',
+        text: '<@B456> check this file',
+        ts: '1234567890.123456',
+        channel: 'C789',
+        files: [{
+          id: 'F123',
+          name: 'archive.zip',
+          mimetype: 'application/zip',
+          url_private: 'https://files.slack.com/files/archive.zip',
         }],
       };
 

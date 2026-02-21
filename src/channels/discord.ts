@@ -4,8 +4,9 @@
  */
 
 import { Client, GatewayIntentBits, Events, Message as DiscordMessage, TextChannel, Attachment } from 'discord.js';
-import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage } from './types.js';
+import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, ChannelDocument } from './types.js';
 import { channelRegistry } from './registry.js';
+import { documentParser } from '../documents/index.js';
 import pino from 'pino';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -173,6 +174,36 @@ export class DiscordChannel implements Channel {
     }
   }
 
+  /**
+   * Download and parse document from Discord attachment
+   */
+  private async downloadDiscordDocument(attachment: Attachment): Promise<ChannelDocument | null> {
+    try {
+      const response = await fetch(attachment.url);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      
+      const mimeType = attachment.contentType || 'application/octet-stream';
+      const filename = attachment.name || 'document';
+      
+      // Parse the document
+      const parsed = await documentParser.parseDocument(buffer, filename, mimeType);
+      
+      logger.info({ attachmentId: attachment.id, filename, wordCount: parsed.wordCount }, 'Parsed Discord document');
+      
+      return {
+        id: parsed.id,
+        filename: parsed.filename,
+        mimeType: parsed.mimeType,
+        text: parsed.text,
+        pageCount: parsed.pageCount,
+        wordCount: parsed.wordCount,
+      };
+    } catch (err) {
+      logger.error({ err, attachmentId: attachment.id }, 'Failed to download/parse Discord document');
+      return null;
+    }
+  }
+
   private setupHandlers(): void {
     if (!this.client || !this.config) return;
 
@@ -250,23 +281,56 @@ export class DiscordChannel implements Channel {
         }
       }
 
+      // Download any document attachments
+      const documents: ChannelDocument[] = [];
+      const documentAttachments = msg.attachments.filter(a => {
+        const mimeType = a.contentType || '';
+        const filename = a.name || '';
+        return documentParser.isSupportedDocumentByFilename(mimeType, filename);
+      });
+
+      if (documentAttachments.size > 0) {
+        for (const [, attachment] of documentAttachments) {
+          try {
+            const doc = await this.downloadDiscordDocument(attachment);
+            if (doc) documents.push(doc);
+          } catch (err) {
+            logger.error({ err, attachmentId: attachment.id }, 'Failed to download Discord document');
+          }
+        }
+      }
+
+      // Build text content including document text
+      let messageText = content;
+      if (documents.length > 0) {
+        const docInfo = documents.map(d => 
+          `[Document: ${d.filename}${d.pageCount ? ` (${d.pageCount} pages)` : ''}, ${d.wordCount} words]\n\n${d.text}`
+        ).join('\n\n---\n\n');
+        messageText = messageText ? `${messageText}\n\n${docInfo}` : docInfo;
+      }
+      if (!messageText && images.length > 0) {
+        messageText = '[Image attached]';
+      }
+
       const message: ChannelMessage = {
         id: msg.id,
         userId: msg.author.id,
         username: msg.author.username,
-        text: content || (images.length > 0 ? '[Image attached]' : ''),
+        text: messageText || '',
         timestamp: msg.createdAt,
         images: images.length > 0 ? images : undefined,
+        documents: documents.length > 0 ? documents : undefined,
         metadata: {
           guildId: msg.guild?.id,
           guildName: msg.guild?.name,
           channelId: msg.channel.id,
           isDM: !msg.guild,
           hasImage: images.length > 0,
+          hasDocument: documents.length > 0,
         },
       };
 
-      logger.info({ userId: message.userId, text: message.text.slice(0, 50), imageCount: images.length }, 'Received Discord message');
+      logger.info({ userId: message.userId, text: message.text.slice(0, 50), imageCount: images.length, documentCount: documents.length }, 'Received Discord message');
 
       try {
         if ('sendTyping' in msg.channel) {
