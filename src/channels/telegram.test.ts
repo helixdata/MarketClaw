@@ -549,3 +549,753 @@ describe('TelegramChannel module exports', () => {
     expect(new mod.TelegramChannel()).toBeInstanceOf(TelegramChannel);
   });
 });
+
+// =========================================================================
+// IMAGE SUPPORT TESTS
+// =========================================================================
+
+// Mock fs modules for image operations
+vi.mock('fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('fs', () => ({
+  existsSync: vi.fn().mockReturnValue(true),
+}));
+
+// Mock global fetch for downloading images
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+import { writeFile, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+
+describe('TelegramChannel Image Support', () => {
+  let channel: TelegramChannel;
+  let mockHandler: ReturnType<typeof vi.fn>;
+  let photoHandler: ((ctx: any) => Promise<void>) | undefined;
+  let documentHandler: ((ctx: any) => Promise<void>) | undefined;
+
+  const createMockCtx = (overrides: any = {}) => ({
+    from: { id: 123456, username: 'testuser' },
+    chat: { id: 123456, type: 'private' },
+    message: {
+      message_id: 1,
+      date: Math.floor(Date.now() / 1000),
+      ...overrides.message,
+    },
+    sendChatAction: vi.fn().mockResolvedValue(undefined),
+    reply: vi.fn().mockResolvedValue(undefined),
+    telegram: {
+      getFile: vi.fn().mockResolvedValue({
+        file_id: 'test-file-id',
+        file_path: 'photos/file_123.jpg',
+      }),
+    },
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    
+    // Reset fetch mock
+    mockFetch.mockResolvedValue({
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(1024)),
+    });
+    
+    // Reset fs mocks
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(mkdir).mockResolvedValue(undefined);
+    
+    // Setup mock handler
+    mockHandler = vi.fn().mockResolvedValue({ text: 'Image processed!' });
+    vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(mockHandler);
+    
+    // Capture the handlers when bot.on is called
+    mockBot.on.mockImplementation((event: string, handler: any) => {
+      if (event === 'photo') {
+        photoHandler = handler;
+      } else if (event === 'document') {
+        documentHandler = handler;
+      }
+    });
+
+    channel = new TelegramChannel();
+    const config: TelegramConfig = {
+      enabled: true,
+      botToken: 'test-bot-token',
+    };
+    await channel.initialize(config);
+  });
+
+  afterEach(async () => {
+    try {
+      await channel.stop();
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+  });
+
+  describe('downloadTelegramImages()', () => {
+    it('should successfully download image from Telegram API', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [
+            { file_id: 'small-id', width: 100, height: 100 },
+            { file_id: 'large-id', width: 800, height: 600 },
+          ],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      // Verify getFile was called with the largest photo's file_id
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('large-id');
+      // Verify fetch was called with the correct URL
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('https://api.telegram.org/file/bot')
+      );
+    });
+
+    it('should create images directory if not exists', async () => {
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-id', width: 100, height: 100 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('.marketclaw'),
+        { recursive: true }
+      );
+    });
+
+    it('should handle multiple file IDs', async () => {
+      // For documents, we only process one at a time, but let's verify the flow
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [
+            { file_id: 'id-1', width: 100, height: 100 },
+            { file_id: 'id-2', width: 200, height: 200 },
+            { file_id: 'id-3', width: 800, height: 600 },
+          ],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      // Should only get the highest resolution (last in array)
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('id-3');
+      expect(ctx.telegram.getFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should extract correct mime type for .jpg extension', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-id', width: 100, height: 100 }],
+        },
+      });
+      ctx.telegram.getFile.mockResolvedValue({
+        file_id: 'test-id',
+        file_path: 'photos/file_123.jpg',
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({ mimeType: 'image/jpeg' }),
+          ]),
+        })
+      );
+    });
+
+    it('should extract correct mime type for .png extension', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-id', width: 100, height: 100 }],
+        },
+      });
+      ctx.telegram.getFile.mockResolvedValue({
+        file_id: 'test-id',
+        file_path: 'photos/file_123.png',
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({ mimeType: 'image/png' }),
+          ]),
+        })
+      );
+    });
+
+    it('should extract correct mime type for .gif extension', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-id', width: 100, height: 100 }],
+        },
+      });
+      ctx.telegram.getFile.mockResolvedValue({
+        file_id: 'test-id',
+        file_path: 'photos/file_123.gif',
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({ mimeType: 'image/gif' }),
+          ]),
+        })
+      );
+    });
+
+    it('should extract correct mime type for .webp extension', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-id', width: 100, height: 100 }],
+        },
+      });
+      ctx.telegram.getFile.mockResolvedValue({
+        file_id: 'test-id',
+        file_path: 'photos/file_123.webp',
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({ mimeType: 'image/webp' }),
+          ]),
+        })
+      );
+    });
+
+    it('should save file locally with timestamp filename', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-file-id', width: 100, height: 100 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/\d+-[a-zA-Z0-9_-]+\.jpg$/),
+        expect.any(Buffer)
+      );
+    });
+
+    it('should return ChannelImage with all required fields', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'test-file-id', width: 100, height: 100 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'test-file-id',
+              url: expect.stringContaining('https://api.telegram.org'),
+              path: expect.stringContaining('.marketclaw'),
+              mimeType: expect.any(String),
+              size: expect.any(Number),
+              filename: expect.any(String),
+              base64: expect.any(String),
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should handle download failures gracefully and continue', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'bad-id', width: 100, height: 100 }],
+        },
+      });
+      
+      // Make getFile throw an error
+      ctx.telegram.getFile.mockRejectedValue(new Error('File not found'));
+
+      await photoHandler!(ctx);
+
+      // Should still call handler, but with empty images array
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: [],
+        })
+      );
+    });
+  });
+
+  describe('Photo message handler (bot.on("photo"))', () => {
+    it('should receive photo and download highest resolution (last in array)', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [
+            { file_id: 'thumb', width: 90, height: 90 },
+            { file_id: 'small', width: 320, height: 320 },
+            { file_id: 'medium', width: 800, height: 800 },
+            { file_id: 'large', width: 1280, height: 1280 },
+          ],
+          caption: 'Check out this image!',
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('large');
+    });
+
+    it('should create ChannelMessage with images array', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 42,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+          caption: 'My caption',
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          id: '42',
+          userId: '123456',
+          username: 'testuser',
+          images: expect.any(Array),
+        })
+      );
+    });
+
+    it('should handle caption as text', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+          caption: 'This is my photo caption',
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          text: 'This is my photo caption',
+        })
+      );
+    });
+
+    it('should fall back to "[Image attached]" when no caption', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+          // No caption
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          text: '[Image attached]',
+        })
+      );
+    });
+
+    it('should call message handler with image data', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledTimes(1);
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            hasImage: true,
+          }),
+        })
+      );
+    });
+
+    it('should send typing action before processing', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(ctx.sendChatAction).toHaveBeenCalledWith('typing');
+    });
+  });
+
+  describe('Document handler (bot.on("document"))', () => {
+    it('should only process image mime types (image/*)', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'doc-file-id',
+            mime_type: 'image/png',
+            file_name: 'screenshot.png',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(ctx.telegram.getFile).toHaveBeenCalledWith('doc-file-id');
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('should ignore non-image documents (pdf)', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'pdf-file-id',
+            mime_type: 'application/pdf',
+            file_name: 'document.pdf',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(ctx.telegram.getFile).not.toHaveBeenCalled();
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('should ignore non-image documents (text)', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'txt-file-id',
+            mime_type: 'text/plain',
+            file_name: 'notes.txt',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(ctx.telegram.getFile).not.toHaveBeenCalled();
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('should download and include in ChannelMessage.images', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'image-doc-id',
+            mime_type: 'image/jpeg',
+            file_name: 'photo.jpg',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'image-doc-id',
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should handle filename in metadata', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'image-doc-id',
+            mime_type: 'image/png',
+            file_name: 'my_screenshot.png',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            filename: 'my_screenshot.png',
+          }),
+        })
+      );
+    });
+
+    it('should handle document with caption', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'image-doc-id',
+            mime_type: 'image/jpeg',
+            file_name: 'photo.jpg',
+          },
+          caption: 'Document caption here',
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          text: 'Document caption here',
+        })
+      );
+    });
+
+    it('should fall back to "[Image attached]" when no caption', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'image-doc-id',
+            mime_type: 'image/webp',
+            file_name: 'sticker.webp',
+          },
+          // No caption
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          text: '[Image attached]',
+        })
+      );
+    });
+  });
+
+  describe('Error handling for image operations', () => {
+    it('should handle graceful failure on download error', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+      
+      // Make fetch fail
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      await photoHandler!(ctx);
+
+      // Should still process message with empty images
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: [],
+        })
+      );
+    });
+
+    it('should still process message even if image download fails', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+          caption: 'Important message with broken image',
+        },
+      });
+      
+      ctx.telegram.getFile.mockRejectedValue(new Error('API error'));
+
+      await photoHandler!(ctx);
+
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          text: 'Important message with broken image',
+          images: [],
+        })
+      );
+    });
+
+    it('should reply with error if entire photo handler throws', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+      
+      // Make handler throw
+      mockHandler.mockRejectedValue(new Error('Processing failed'));
+
+      await photoHandler!(ctx);
+
+      expect(ctx.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Error processing')
+      );
+    });
+
+    it('should reply with error if entire document handler throws', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'doc-id',
+            mime_type: 'image/png',
+            file_name: 'image.png',
+          },
+        },
+      });
+      
+      // Make handler throw
+      mockHandler.mockRejectedValue(new Error('Processing failed'));
+
+      await documentHandler!(ctx);
+
+      expect(ctx.reply).toHaveBeenCalledWith(
+        expect.stringContaining('Error processing')
+      );
+    });
+
+    it('should handle writeFile failure gracefully', async () => {
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+      
+      vi.mocked(writeFile).mockRejectedValue(new Error('Disk full'));
+
+      await photoHandler!(ctx);
+
+      // Should still try to process (the error is caught in downloadTelegramImages)
+      expect(mockHandler).toHaveBeenCalledWith(
+        channel,
+        expect.objectContaining({
+          images: [], // Empty because download failed
+        })
+      );
+    });
+
+    it('should handle no message handler configured for photo', async () => {
+      vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(undefined as any);
+
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          photo: [{ file_id: 'photo-id', width: 800, height: 600 }],
+        },
+      });
+
+      await photoHandler!(ctx);
+
+      expect(ctx.reply).toHaveBeenCalledWith('⚠️ Agent not configured.');
+    });
+
+    it('should handle no message handler configured for document', async () => {
+      vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(undefined as any);
+
+      const ctx = createMockCtx({
+        message: {
+          message_id: 1,
+          date: Math.floor(Date.now() / 1000),
+          document: {
+            file_id: 'doc-id',
+            mime_type: 'image/png',
+            file_name: 'image.png',
+          },
+        },
+      });
+
+      await documentHandler!(ctx);
+
+      expect(ctx.reply).toHaveBeenCalledWith('⚠️ Agent not configured.');
+    });
+  });
+});
