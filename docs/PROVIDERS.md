@@ -4,14 +4,36 @@ MarketClaw supports multiple AI providers. Choose based on your needs:
 
 ## Quick Comparison
 
-| Provider | Speed | Tool Use | Cost | Best For |
-|----------|-------|----------|------|----------|
-| **Anthropic** | Medium | Excellent | $$ | Complex tasks, reasoning |
-| **OpenAI** | Fast | Good | $$ | General purpose |
-| **Groq** | ⚡ Fast | Good | $ | Quick responses |
-| **Gemini** | Medium | Good | Free tier | Multimodal, budget |
-| **Ollama** | Varies | Limited | Free | Privacy, local |
-| **OpenRouter** | Varies | Varies | $$ | Access to all models |
+| Provider | Speed | Tool Use | Vision | Cost | Best For |
+|----------|-------|----------|--------|------|----------|
+| **Anthropic** | Medium | Excellent | ✅ | $$ | Complex tasks, reasoning |
+| **OpenAI** | Fast | Good | ✅ | $$ | General purpose |
+| **Groq** | ⚡ Fast | Good | ❌ | $ | Quick responses |
+| **Gemini** | Medium | Good | ✅ | Free tier | Multimodal, budget |
+| **Ollama** | Varies | Limited | Varies | Free | Privacy, local |
+| **OpenRouter** | Varies | Varies | Varies | $$ | Access to all models |
+
+## Vision Support
+
+MarketClaw supports sending images to vision-capable models. When a user sends an image via Telegram, Discord, or Slack, it's automatically processed and sent to the AI.
+
+**How it works:**
+1. Image received from channel (photo, attachment, or file)
+2. Downloaded and converted to base64
+3. Sent to the AI as part of the message
+4. AI analyzes and responds
+
+**Supported providers:**
+- **Anthropic**: Claude 3+ models (Opus, Sonnet, Haiku)
+- **OpenAI**: GPT-4o, GPT-4-turbo
+- **Gemini**: All Gemini 1.5+ models
+
+**Use cases:**
+- Analyze competitor landing pages
+- Review marketing collateral
+- Get feedback on designs
+- Extract text from screenshots
+- Describe product images for alt text
 
 ---
 

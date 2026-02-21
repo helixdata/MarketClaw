@@ -39,6 +39,7 @@
     "discord.js": "^14.25.1",
     "dotenv": "^16.4.0",
     "fs-extra": "^11.2.0",
+    "image-size": "^2.0.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.0",
     "openai": "^4.104.0",

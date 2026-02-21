@@ -70,9 +70,12 @@ Use any AI provider:
 
 - **Scheduling** — Post later, set reminders
 - **Knowledge base** — Store product info, search with embeddings
+- **Brand identity** — Colors, voice, taglines, typography per product
+- **Image library** — Store, tag, and search product images
+- **Web search** — Search the web with Brave API, extract content from URLs
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
-- **Images** — Generate with DALL-E
+- **Images** — Generate with DALL-E, analyze with vision
 - **Leads** — Simple CRM
 
 ### 📱 Telegram-First
@@ -152,6 +155,91 @@ Manager: "approve"
 Bot: ✅ Approved! Ready to post.
 ```
 
+### 🎨 Brand Identity
+
+Define your brand for consistent content:
+
+```
+You: "Set ProofPing brand colors: primary #FF6B35, accent #00D9C0"
+Bot: ✅ Updated brand colors for ProofPing
+
+You: "ProofPing voice is warm and reassuring, never corporate"
+Bot: ✅ Updated brand voice for ProofPing
+
+You: "What are ProofPing's brand guidelines?"
+Bot: 🎨 ProofPing Brand:
+     Colors: primary #FF6B35, accent #00D9C0
+     Voice: warm, reassuring friend
+     Tagline: "Someone's always got your back"
+```
+
+The agent automatically uses brand guidelines when creating content.
+
+### 🔍 Web Search & Research
+
+Search the web and extract content for research:
+
+```
+You: "Research AI marketing trends"
+Bot: # Research: AI marketing trends
+
+     Found 5 sources:
+     1. **The Rise of AI in Marketing** - How brands are using...
+     2. **Marketing Automation 2024** - Key trends to watch...
+
+You: "Search for Product Hunt launch tips from this week"
+Bot: Found 5 recent results:
+     • How to Launch on Product Hunt (2 days ago)
+     • Top Tips from #1 Products (5 days ago)
+     ...
+
+You: "Fetch the content from https://example.com/article"
+Bot: Extracted 3,500 characters from the article...
+```
+
+Tools: `web_search`, `web_fetch`, `research_topic`
+
+### 🖼️ Product Image Library
+
+Store and search product images:
+
+```
+You: "Add this screenshot to ProofPing" [attaches image]
+Bot: ✅ Added "screenshot.png" to ProofPing library
+
+You: "Find ProofPing screenshots showing the dashboard"
+Bot: 📸 Found 3 images:
+     • App Store Hero (screenshot) - iPhone showing main dashboard
+     • Dashboard Dark Mode (screenshot) - Dark theme variant
+     • Check-in Flow (screenshot) - Step-by-step check-in
+
+You: "List all ProofPing logos"
+Bot: 📸 2 logo images found...
+```
+
+Features:
+- Semantic search ("find mockups showing check-in")
+- Tag and type filtering
+- Auto dimension detection
+- URL or file upload
+
+### 👁️ Vision Support
+
+Send images and MarketClaw can analyze them:
+
+```
+You: [sends competitor's landing page screenshot]
+     "What's good about this landing page?"
+
+Bot: Here's my analysis:
+     ✅ Clear value proposition above the fold
+     ✅ Strong social proof with logos
+     ⚠️ CTA could be more prominent
+     ...
+```
+
+Works across Telegram, Discord, and Slack with Claude, GPT-4o, and Gemini.
+
 ### 💰 Cost Tracking
 
 Monitor and control API spending:
@@ -191,6 +279,7 @@ OPENROUTER_API_KEY=sk-or-...
 
 # Optional integrations
 RESEND_API_KEY=re_...
+BRAVE_SEARCH_API_KEY=BSA...
 TWITTER_COOKIES=...
 ```
 
@@ -293,6 +382,9 @@ marketclaw config
 - [Setup Guide](./docs/SETUP.md) — Detailed installation & configuration
 - [Channels](./docs/CHANNELS.md) — Telegram, Discord, Slack, CLI
 - [Providers](./docs/PROVIDERS.md) — Configure AI providers
+- [Brand Identity](./docs/BRAND.md) — Colors, voice, taglines, typography
+- [Image Library](./docs/IMAGE-LIBRARY.md) — Store & search product images
+- [Web Search](./docs/WEB-SEARCH.md) — Search the web & extract content
 - [Sub-Agents](./docs/SUB-AGENTS.md) — Specialist agents & delegation
 - [Team](./docs/TEAM.md) — Multi-user roles & permissions
 - [Approvals](./docs/APPROVALS.md) — Content approval workflow
@@ -318,9 +410,14 @@ marketclaw config
 - [x] Sub-agents system
 - [x] Team management
 - [x] Approval workflow
-- [x] Modular channels
+- [x] Modular channels (Telegram, Discord, Slack)
 - [x] Cost tracking & budgets
+- [x] Brand identity management
+- [x] Product image library
+- [x] Vision/image support
+- [x] Web search & research tools
 - [ ] Skills/Marketplace
+- [ ] Microsoft Teams channel
 - [ ] Web dashboard
 - [ ] Analytics dashboard
 - [ ] Automated posting

@@ -84,6 +84,11 @@ const ConfigSchema = z.object({
   // Workspace
   workspace: z.string().optional(),
 
+  // Web search
+  web: z.object({
+    braveApiKey: z.string().optional(),
+  }).optional(),
+
   // Sub-agents
   agents: z.object({
     enabled: z.boolean().default(true),
@@ -152,6 +157,10 @@ export async function loadConfig(): Promise<Config> {
         ...parsed?.providers?.openai,
         apiKey: process.env.OPENAI_API_KEY || parsed?.providers?.openai?.apiKey,
       },
+    },
+    web: {
+      ...parsed?.web,
+      braveApiKey: process.env.BRAVE_SEARCH_API_KEY || parsed?.web?.braveApiKey,
     },
   };
 

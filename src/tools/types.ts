@@ -79,6 +79,7 @@ export type ToolCategory =
   | 'marketing'
   | 'memory'
   | 'social'
+  | 'research'
   | 'utility';
 
 /**

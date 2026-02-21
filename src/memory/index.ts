@@ -15,6 +15,35 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 
+export interface ProductBrand {
+  colors?: {
+    primary?: string;      // e.g., "#FF6B35"
+    secondary?: string;
+    accent?: string;
+    background?: string;
+    text?: string;
+    [key: string]: string | undefined;  // allow custom color names
+  };
+  voice?: {
+    tone?: string;         // e.g., "warm", "professional", "playful"
+    personality?: string;  // e.g., "friendly expert", "trusted advisor"
+    style?: string;        // e.g., "casual", "formal", "conversational"
+    guidelines?: string;   // free-form voice guidelines
+  };
+  typography?: {
+    headingFont?: string;
+    bodyFont?: string;
+    guidelines?: string;
+  };
+  taglines?: string[];     // multiple taglines/slogans
+  assets?: {
+    logo?: string;         // URL
+    logoAlt?: string;
+    icon?: string;
+    [key: string]: string | undefined;
+  };
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -25,6 +54,7 @@ export interface Product {
   positioning?: string;
   competitors?: string[];
   links?: Record<string, string>;
+  brand?: ProductBrand;
   createdAt: number;
   updatedAt: number;
 }

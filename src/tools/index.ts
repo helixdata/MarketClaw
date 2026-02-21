@@ -18,6 +18,9 @@ import { imapTools } from './imap-tools.js';
 import { configTools } from './config-tools.js';
 import { leadsTools } from './leads-tools.js';
 import { costTools } from '../costs/tools.js';
+import { brandTools } from './brand-tools.js';
+import { imageLibraryTools } from './image-library-tools.js';
+import { webTools } from './web-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -56,6 +59,15 @@ export async function initializeTools(): Promise<void> {
   // Register cost tracking tools
   toolRegistry.registerAll(costTools, { category: 'utility' });
   
+  // Register brand identity tools
+  toolRegistry.registerAll(brandTools, { category: 'marketing' });
+  
+  // Register image library tools
+  toolRegistry.registerAll(imageLibraryTools, { category: 'marketing' });
+  
+  // Register web search tools
+  toolRegistry.registerAll(webTools, { category: 'research' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -71,3 +83,6 @@ export { imapTools } from './imap-tools.js';
 export { configTools } from './config-tools.js';
 export { leadsTools } from './leads-tools.js';
 export { costTools } from '../costs/tools.js';
+export { brandTools } from './brand-tools.js';
+export { imageLibraryTools } from './image-library-tools.js';
+export { webTools } from './web-tools.js';
