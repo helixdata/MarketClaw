@@ -1,0 +1,253 @@
+/**
+ * Scheduler Tools
+ * Tools for managing scheduled jobs (posts, reminders, tasks)
+ */
+
+import { Tool, ToolResult } from './types.js';
+import { scheduler, Scheduler } from '../scheduler/index.js';
+
+// ============ Schedule Post ============
+export const schedulePostTool: Tool = {
+  name: 'schedule_post',
+  description: 'Schedule a social media post for later. Supports Twitter, LinkedIn, Telegram.',
+  parameters: {
+    type: 'object',
+    properties: {
+      content: { type: 'string', description: 'The post content' },
+      channel: { 
+        type: 'string', 
+        enum: ['twitter', 'linkedin', 'telegram'],
+        description: 'Where to post' 
+      },
+      when: { 
+        type: 'string', 
+        description: 'When to post (e.g., "at 09:00", "every day", "in 2 hours", or cron expression)' 
+      },
+      productId: { type: 'string', description: 'Associated product ID (optional)' },
+      campaignId: { type: 'string', description: 'Associated campaign ID (optional)' },
+    },
+    required: ['content', 'channel', 'when'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const cronExpression = Scheduler.parseToCron(params.when);
+    
+    if (!cronExpression) {
+      return {
+        success: false,
+        message: `Could not parse schedule "${params.when}". Try formats like "every day", "at 09:00", "every 2 hours", or a cron expression.`,
+      };
+    }
+
+    const job = await scheduler.addJob({
+      name: `Post to ${params.channel}`,
+      description: params.content.slice(0, 100),
+      cronExpression,
+      type: 'post',
+      enabled: true,
+      payload: {
+        channel: params.channel,
+        content: params.content,
+        productId: params.productId,
+        campaignId: params.campaignId,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Scheduled post to ${params.channel}. Job ID: ${job.id}`,
+      data: { jobId: job.id, schedule: cronExpression },
+    };
+  },
+};
+
+// ============ Schedule Reminder ============
+export const scheduleReminderTool: Tool = {
+  name: 'schedule_reminder',
+  description: 'Set a reminder that will be sent via Telegram',
+  parameters: {
+    type: 'object',
+    properties: {
+      message: { type: 'string', description: 'Reminder message' },
+      when: { 
+        type: 'string', 
+        description: 'When to remind (e.g., "at 14:00", "every Monday", "in 30 minutes")' 
+      },
+      recurring: { type: 'boolean', description: 'Whether this repeats (default: based on schedule)' },
+    },
+    required: ['message', 'when'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const cronExpression = Scheduler.parseToCron(params.when);
+    
+    if (!cronExpression) {
+      return {
+        success: false,
+        message: `Could not parse schedule "${params.when}".`,
+      };
+    }
+
+    const job = await scheduler.addJob({
+      name: 'Reminder',
+      description: params.message.slice(0, 100),
+      cronExpression,
+      type: 'reminder',
+      enabled: true,
+      payload: {
+        content: params.message,
+        metadata: { recurring: params.recurring ?? false },
+      },
+    });
+
+    return {
+      success: true,
+      message: `Reminder set for ${params.when}. Job ID: ${job.id}`,
+      data: { jobId: job.id, schedule: cronExpression },
+    };
+  },
+};
+
+// ============ List Jobs ============
+export const listJobsTool: Tool = {
+  name: 'list_scheduled_jobs',
+  description: 'List all scheduled jobs (posts, reminders, tasks)',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: { 
+        type: 'string', 
+        enum: ['post', 'reminder', 'task', 'heartbeat'],
+        description: 'Filter by job type' 
+      },
+      productId: { type: 'string', description: 'Filter by product' },
+    },
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const jobs = scheduler.listJobs({
+      type: params?.type,
+      productId: params?.productId,
+    });
+
+    if (jobs.length === 0) {
+      return {
+        success: true,
+        message: 'No scheduled jobs found.',
+        data: [],
+      };
+    }
+
+    const summary = jobs.map(j => ({
+      id: j.id,
+      name: j.name,
+      type: j.type,
+      schedule: j.cronExpression,
+      enabled: j.enabled,
+      lastRun: j.lastRun ? new Date(j.lastRun).toISOString() : null,
+      runCount: j.runCount,
+      content: j.payload.content?.slice(0, 50),
+    }));
+
+    return {
+      success: true,
+      message: `Found ${jobs.length} scheduled job(s).`,
+      data: summary,
+    };
+  },
+};
+
+// ============ Cancel Job ============
+export const cancelJobTool: Tool = {
+  name: 'cancel_scheduled_job',
+  description: 'Cancel and delete a scheduled job',
+  parameters: {
+    type: 'object',
+    properties: {
+      jobId: { type: 'string', description: 'Job ID to cancel' },
+    },
+    required: ['jobId'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const removed = await scheduler.removeJob(params.jobId);
+    
+    return removed
+      ? { success: true, message: `Job ${params.jobId} cancelled.` }
+      : { success: false, message: `Job ${params.jobId} not found.` };
+  },
+};
+
+// ============ Pause Job ============
+export const pauseJobTool: Tool = {
+  name: 'pause_scheduled_job',
+  description: 'Pause a scheduled job (can resume later)',
+  parameters: {
+    type: 'object',
+    properties: {
+      jobId: { type: 'string', description: 'Job ID to pause' },
+    },
+    required: ['jobId'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const success = await scheduler.disableJob(params.jobId);
+    
+    return success
+      ? { success: true, message: `Job ${params.jobId} paused.` }
+      : { success: false, message: `Job ${params.jobId} not found.` };
+  },
+};
+
+// ============ Resume Job ============
+export const resumeJobTool: Tool = {
+  name: 'resume_scheduled_job',
+  description: 'Resume a paused job',
+  parameters: {
+    type: 'object',
+    properties: {
+      jobId: { type: 'string', description: 'Job ID to resume' },
+    },
+    required: ['jobId'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const success = await scheduler.enableJob(params.jobId);
+    
+    return success
+      ? { success: true, message: `Job ${params.jobId} resumed.` }
+      : { success: false, message: `Job ${params.jobId} not found.` };
+  },
+};
+
+// ============ Run Job Now ============
+export const runJobNowTool: Tool = {
+  name: 'run_job_now',
+  description: 'Execute a scheduled job immediately (outside its normal schedule)',
+  parameters: {
+    type: 'object',
+    properties: {
+      jobId: { type: 'string', description: 'Job ID to run' },
+    },
+    required: ['jobId'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const success = await scheduler.runNow(params.jobId);
+    
+    return success
+      ? { success: true, message: `Job ${params.jobId} executed.` }
+      : { success: false, message: `Job ${params.jobId} not found.` };
+  },
+};
+
+// ============ Export All ============
+export const schedulerTools: Tool[] = [
+  schedulePostTool,
+  scheduleReminderTool,
+  listJobsTool,
+  cancelJobTool,
+  pauseJobTool,
+  resumeJobTool,
+  runJobNowTool,
+];
