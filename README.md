@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="MarketClaw" width="200">
 </p>
 
-<h1 align="center">MarketClaw 🦀</h1>
+<h1 align="center">MarketClaw</h1>
 
 <p align="center">
   <strong>AI-powered marketing agent that lives in Telegram.</strong>
@@ -10,9 +10,12 @@
 
 Build in public, automate your marketing, never forget your campaigns.
 
+[![CI](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/helixdata/MarketClaw/blob/main/CONTRIBUTING.md)
+[![GitHub Discussions](https://img.shields.io/github/discussions/helixdata/MarketClaw)](https://github.com/helixdata/MarketClaw/discussions)
 
 ---
 
@@ -34,8 +37,8 @@ Think of it as your marketing co-pilot that's always on, always learning, and ne
 
 ```bash
 # Clone
-git clone https://github.com/marketclaw/marketclaw.git
-cd marketclaw
+git clone https://github.com/helixdata/MarketClaw.git
+cd MarketClaw
 
 # Install
 npm install
