@@ -58,13 +58,13 @@ export class OpenAIProvider implements Provider {
       if (m.role === 'tool' && m.toolCallId) {
         messages.push({
           role: 'tool',
-          content: m.content,
+          content: m.content as string,
           tool_call_id: m.toolCallId,
         });
       } else if (m.role === 'assistant' && m.toolCalls?.length) {
         messages.push({
           role: 'assistant',
-          content: m.content || null,
+          content: (m.content as string) || null,
           tool_calls: m.toolCalls.map(tc => ({
             id: tc.id,
             type: 'function' as const,

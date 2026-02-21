@@ -181,9 +181,9 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
       
-      expect(twitterCall[0].identity.name).toBe('Custom Tweety');
+      expect(twitterCall![0].identity.name).toBe('Custom Tweety');
       // Other properties should remain
-      expect(twitterCall[0].identity.emoji).toBe('🐦');
+      expect(twitterCall![0].identity.emoji).toBe('🐦');
     });
 
     it('should apply identity emoji override', async () => {
@@ -198,7 +198,7 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
       
-      expect(twitterCall[0].identity.emoji).toBe('🐤');
+      expect(twitterCall![0].identity.emoji).toBe('🐤');
     });
 
     it('should apply persona override', async () => {
@@ -213,7 +213,7 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const linkedinCall = calls.find((c: any) => c[0].id === 'linkedin');
       
-      expect(linkedinCall[0].identity.persona).toBe('a custom LinkedIn strategist');
+      expect(linkedinCall![0].identity.persona).toBe('a custom LinkedIn strategist');
     });
 
     it('should apply voice override', async () => {
@@ -228,7 +228,7 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const emailCall = calls.find((c: any) => c[0].id === 'email');
       
-      expect(emailCall[0].identity.voice).toBe('professional');
+      expect(emailCall![0].identity.voice).toBe('professional');
     });
 
     it('should apply model override in config', async () => {
@@ -243,7 +243,7 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
       
-      expect(twitterCall[1].model).toBe('claude-3-opus');
+      expect(twitterCall![1].model).toBe('claude-3-opus');
     });
 
     it('should default enabled to true when not specified', async () => {
@@ -261,9 +261,9 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
       
-      expect(twitterCall[0].identity.name).toBe('Tweety');
-      expect(twitterCall[0].identity.emoji).toBe('🐦');
-      expect(twitterCall[0].identity.voice).toBe('playful');
+      expect(twitterCall![0].identity.name).toBe('Tweety');
+      expect(twitterCall![0].identity.emoji).toBe('🐦');
+      expect(twitterCall![0].identity.voice).toBe('playful');
     });
 
     it('should handle empty builtins array', async () => {
@@ -293,10 +293,10 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
       
-      expect(twitterCall[0].identity.name).toBe('Super Tweety');
-      expect(twitterCall[0].identity.emoji).toBe('🦅');
-      expect(twitterCall[0].identity.voice).toBe('professional');
-      expect(twitterCall[1].model).toBe('gpt-4');
+      expect(twitterCall![0].identity.name).toBe('Super Tweety');
+      expect(twitterCall![0].identity.emoji).toBe('🦅');
+      expect(twitterCall![0].identity.voice).toBe('professional');
+      expect(twitterCall![1].model).toBe('gpt-4');
     });
 
     it('should handle multiple agent overrides', async () => {
@@ -313,11 +313,11 @@ describe('Agent Loader', () => {
       const calls = mockRegistry.registerFromManifest.mock.calls;
       
       const twitterCall = calls.find((c: any) => c[0].id === 'twitter');
-      expect(twitterCall[0].identity.name).toBe('Custom Twitter');
+      expect(twitterCall![0].identity.name).toBe('Custom Twitter');
 
       const linkedinCall = calls.find((c: any) => c[0].id === 'linkedin');
-      expect(linkedinCall[0].identity.name).toBe('Custom LinkedIn');
-      expect(linkedinCall[0].identity.voice).toBe('casual');
+      expect(linkedinCall![0].identity.name).toBe('Custom LinkedIn');
+      expect(linkedinCall![0].identity.voice).toBe('casual');
     });
 
     it('should ignore unknown agent in config', async () => {
@@ -465,8 +465,8 @@ describe('Agent Loader', () => {
         (c: any) => c[0].id === 'custom-agent'
       );
       
-      expect(customCall[0].identity.name).toBe('Overridden Name');
-      expect(customCall[1].model).toBe('custom-model');
+      expect(customCall![0].identity.name).toBe('Overridden Name');
+      expect(customCall![1].model).toBe('custom-model');
     });
 
     it('should skip disabled custom agents', async () => {
@@ -727,10 +727,10 @@ describe('Agent Loader', () => {
         (c: any) => c[0].id === 'custom-agent'
       );
 
-      expect(twitterCall[0].identity.name).toBe('Overridden Twitter');
-      expect(twitterCall[1].model).toBe('model-a');
-      expect(customCall[0].identity.name).toBe('Overridden Custom');
-      expect(customCall[1].model).toBe('model-b');
+      expect(twitterCall![0].identity.name).toBe('Overridden Twitter');
+      expect(twitterCall![1].model).toBe('model-a');
+      expect(customCall![0].identity.name).toBe('Overridden Custom');
+      expect(customCall![1].model).toBe('model-b');
     });
   });
 });
