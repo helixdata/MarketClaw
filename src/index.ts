@@ -89,9 +89,27 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
   // Add user message
   history.push({ role: 'user', content: messageContent });
 
-  // Keep history manageable (last 20 messages)
+  // Keep history manageable - but truncate safely at conversation boundaries
+  // Never cut in the middle of a tool call sequence (assistant+tool_use → tool_result)
   if (history.length > 20) {
-    history.splice(0, history.length - 20);
+    // Find a safe truncation point - must be at a user message
+    // to avoid orphaning tool_result messages
+    let truncateAt = history.length - 20;
+    
+    // Scan forward to find the next user message (safe boundary)
+    while (truncateAt < history.length) {
+      const msg = history[truncateAt];
+      if (msg.role === 'user' && typeof msg.content === 'string') {
+        // Found a user message - safe to truncate here
+        break;
+      }
+      truncateAt++;
+    }
+    
+    // Only truncate if we found a safe point
+    if (truncateAt < history.length && truncateAt > 0) {
+      history.splice(0, truncateAt);
+    }
   }
 
   // Build context from memory
