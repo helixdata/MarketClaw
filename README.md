@@ -5,7 +5,8 @@
 <h1 align="center">MarketClaw</h1>
 
 <p align="center">
-  <strong>AI-powered marketing agent that lives in Telegram.</strong>
+  <strong>AI-powered marketing agent that lives in your chat.</strong><br>
+  <em>Telegram, Discord, Slack — or build your own channel.</em>
 </p>
 
 Build in public, automate your marketing, never forget your campaigns.
