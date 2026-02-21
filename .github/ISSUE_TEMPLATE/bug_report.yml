@@ -1,0 +1,73 @@
+name: 🐛 Bug Report
+description: Report something that isn't working
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! 🦀
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug
+      placeholder: Tell us what you see
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: What should have happened instead
+      placeholder: Tell us what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Configure...
+        2. Send message...
+        3. See error...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MarketClaw version
+      description: Run `npm list marketclaw` or check package.json
+      placeholder: "0.1.0"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Which channel?
+      options:
+        - Telegram
+        - Discord
+        - Slack
+        - CLI
+        - N/A
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any error messages or logs (will be formatted as code)
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other info (screenshots, config snippets, etc.)
