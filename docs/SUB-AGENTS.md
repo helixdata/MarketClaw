@@ -183,6 +183,26 @@ Bot: 💼 Quinn now uses: default (global)
 |------|-------------|
 | `set_agent_model` | Set the model for a specific agent |
 | `list_agent_models` | Show all agent model configurations |
+| `recommend_agent_model` | Get optimal model recommendations for agents |
+
+### Get Recommendations
+
+```
+You: What models should my agents use?
+
+Bot: Agent Model Recommendations
+
+     🐦 Tweety: default → gpt-4o-mini
+     💼 Quinn: default → claude-3-5-sonnet
+     ✉️ Emma: default → claude-3-5-sonnet
+     🎨 Pixel: default → gemini-2.0-flash
+     📊 Dash: default → claude-3-5-sonnet
+     🔍 Scout: default → claude-3-opus
+     🚀 Hunter: default → claude-3-5-sonnet
+     🎯 Radar: default → claude-3-opus
+
+     💡 8 agent(s) could be optimized.
+```
 
 ### Recommended Models by Agent
 

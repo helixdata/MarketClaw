@@ -310,6 +310,177 @@ export const listAgentModelsTool: Tool = {
   },
 };
 
+// ============ Recommend Agent Model ============
+export const recommendAgentModelTool: Tool = {
+  name: 'recommend_agent_model',
+  description: 'Get AI model recommendations for a sub-agent based on their specialty and task requirements',
+  parameters: {
+    type: 'object',
+    properties: {
+      agentId: {
+        type: 'string',
+        description: 'Agent ID to get recommendations for (optional - recommends for all if not specified)',
+      },
+    },
+  },
+
+  async execute(params): Promise<ToolResult> {
+    // Model characteristics for recommendation
+    const modelProfiles: Record<string, { 
+      strengths: string[]; 
+      cost: 'low' | 'medium' | 'high';
+      speed: 'fast' | 'medium' | 'slow';
+      reasoning: 'basic' | 'good' | 'excellent';
+    }> = {
+      'gpt-4o-mini': { 
+        strengths: ['short-form', 'fast', 'cheap', 'creative-writing'], 
+        cost: 'low', speed: 'fast', reasoning: 'basic' 
+      },
+      'gpt-4o': { 
+        strengths: ['general', 'balanced', 'vision', 'coding'], 
+        cost: 'medium', speed: 'medium', reasoning: 'good' 
+      },
+      'claude-3-5-sonnet': { 
+        strengths: ['analysis', 'reasoning', 'research', 'nuance', 'long-form'], 
+        cost: 'medium', speed: 'medium', reasoning: 'excellent' 
+      },
+      'claude-3-opus': { 
+        strengths: ['deep-research', 'complex-analysis', 'synthesis', 'strategy'], 
+        cost: 'high', speed: 'slow', reasoning: 'excellent' 
+      },
+      'claude-3-haiku': { 
+        strengths: ['fast', 'cheap', 'simple-tasks', 'high-volume'], 
+        cost: 'low', speed: 'fast', reasoning: 'basic' 
+      },
+      'gemini-2.0-flash': { 
+        strengths: ['vision', 'fast', 'multimodal', 'images'], 
+        cost: 'low', speed: 'fast', reasoning: 'good' 
+      },
+    };
+
+    // Agent specialty to model mapping
+    const agentRecommendations: Record<string, { 
+      recommended: string; 
+      reason: string; 
+      alternatives: string[];
+    }> = {
+      'twitter': {
+        recommended: 'gpt-4o-mini',
+        reason: 'Fast and cheap for short-form content. Tweets are simple, high-volume.',
+        alternatives: ['claude-3-haiku', 'gemini-2.0-flash'],
+      },
+      'linkedin': {
+        recommended: 'claude-3-5-sonnet',
+        reason: 'B2B content needs nuance and professional tone. Quality > speed.',
+        alternatives: ['gpt-4o', 'claude-3-opus'],
+      },
+      'email': {
+        recommended: 'claude-3-5-sonnet',
+        reason: 'Cold outreach needs good reasoning for personalization.',
+        alternatives: ['gpt-4o', 'gpt-4o-mini'],
+      },
+      'creative': {
+        recommended: 'gemini-2.0-flash',
+        reason: 'Best for image prompts and visual tasks. Fast multimodal.',
+        alternatives: ['gpt-4o', 'claude-3-5-sonnet'],
+      },
+      'analyst': {
+        recommended: 'claude-3-5-sonnet',
+        reason: 'Data analysis needs strong reasoning and pattern recognition.',
+        alternatives: ['claude-3-opus', 'gpt-4o'],
+      },
+      'researcher': {
+        recommended: 'claude-3-opus',
+        reason: 'Deep research benefits from excellent reasoning and synthesis.',
+        alternatives: ['claude-3-5-sonnet', 'gpt-4o'],
+      },
+      'producthunt': {
+        recommended: 'claude-3-5-sonnet',
+        reason: 'Launch content is critical. Needs quality and strategic thinking.',
+        alternatives: ['gpt-4o', 'claude-3-opus'],
+      },
+      'audience': {
+        recommended: 'claude-3-opus',
+        reason: 'Audience research needs deep analysis, synthesis, and insight extraction.',
+        alternatives: ['claude-3-5-sonnet', 'gpt-4o'],
+      },
+    };
+
+    // If specific agent requested
+    if (params?.agentId) {
+      const agent = subAgentRegistry.get(params.agentId);
+      if (!agent) {
+        return {
+          success: false,
+          message: `Agent not found: ${params.agentId}`,
+        };
+      }
+
+      const rec = agentRecommendations[params.agentId];
+      if (!rec) {
+        return {
+          success: true,
+          message: `No specific recommendation for ${params.agentId}. Using default model is fine.`,
+          data: { agentId: params.agentId, recommended: 'default' },
+        };
+      }
+
+      const currentModel = agent.config.model || 'default';
+      const isOptimal = currentModel === rec.recommended;
+
+      return {
+        success: true,
+        message: `${agent.config.identity.emoji} ${agent.config.identity.name}\n\n` +
+          `**Recommended:** ${rec.recommended}\n` +
+          `**Reason:** ${rec.reason}\n` +
+          `**Alternatives:** ${rec.alternatives.join(', ')}\n` +
+          `**Current:** ${currentModel}${isOptimal ? ' ✓ (optimal)' : ''}`,
+        data: {
+          agentId: params.agentId,
+          current: currentModel,
+          recommended: rec.recommended,
+          reason: rec.reason,
+          alternatives: rec.alternatives,
+          isOptimal,
+        },
+      };
+    }
+
+    // Recommend for all agents
+    const agents = subAgentRegistry.listEnabled();
+    const recommendations = agents.map(a => {
+      const id = a.config.specialty.id;
+      const rec = agentRecommendations[id];
+      const current = a.config.model || 'default';
+      
+      return {
+        emoji: a.config.identity.emoji,
+        name: a.config.identity.name,
+        id,
+        current,
+        recommended: rec?.recommended || 'default',
+        reason: rec?.reason || 'No specific recommendation',
+        isOptimal: current === rec?.recommended || (!rec && current === 'default'),
+      };
+    });
+
+    const formatted = recommendations
+      .map(r => `${r.emoji} ${r.name}: ${r.current}${r.isOptimal ? ' ✓' : ` → ${r.recommended}`}`)
+      .join('\n');
+
+    const needsUpdate = recommendations.filter(r => !r.isOptimal);
+
+    return {
+      success: true,
+      message: `**Agent Model Recommendations**\n\n${formatted}\n\n` +
+        (needsUpdate.length > 0 
+          ? `💡 ${needsUpdate.length} agent(s) could be optimized.`
+          : '✅ All agents are using optimal models.'),
+      data: { recommendations },
+    };
+  },
+};
+
 // ============ Create Custom Agent ============
 export const createAgentTool: Tool = {
   name: 'create_agent',
@@ -407,5 +578,6 @@ export const agentTools: Tool[] = [
   agentInfoTool,
   setAgentModelTool,
   listAgentModelsTool,
+  recommendAgentModelTool,
   createAgentTool,
 ];

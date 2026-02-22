@@ -304,6 +304,19 @@ Show all agent model configurations.
 
 *No parameters.*
 
+### `recommend_agent_model`
+
+Get optimal model recommendations for agents based on their specialty.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agentId` | string | No | Agent ID (omit for all agents) |
+
+**Returns:**
+- Recommended model with reasoning
+- Current model vs optimal comparison
+- Alternative model options
+
 ### `create_agent`
 
 Create a custom agent.
