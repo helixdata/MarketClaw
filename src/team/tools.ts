@@ -214,7 +214,7 @@ export const assignRoleTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId 
+    const member = params.memberId 
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 
@@ -505,7 +505,7 @@ export const updateMemberPreferencesTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId
+    const member = params.memberId
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 
@@ -558,7 +558,7 @@ export const rememberMemberTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId
+    const member = params.memberId
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 

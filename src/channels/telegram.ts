@@ -354,7 +354,7 @@ export class TelegramChannel implements Channel {
         await ctx.sendChatAction('typing');
 
         let images: ChannelImage[] = [];
-        let documents: ChannelDocument[] = [];
+        const documents: ChannelDocument[] = [];
 
         // Handle image documents
         if (mimeType.startsWith('image/')) {
