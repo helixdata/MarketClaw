@@ -3,7 +3,10 @@
  * Creates PPTX presentations using pptxgenjs
  */
 
-import PptxGenJS from 'pptxgenjs';
+import PptxGenJSModule from 'pptxgenjs';
+
+// Handle ESM/CJS interop - pptxgenjs exports differently depending on environment
+const PptxGenJS = (PptxGenJSModule as any).default || PptxGenJSModule;
 
 export interface PptxSlide {
   /** Slide title */
