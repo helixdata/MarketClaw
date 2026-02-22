@@ -12,6 +12,7 @@ export const TOOL_PERMISSIONS: Record<string, Permission> = {
   // Team management (admin only)
   'add_team_member': 'manage_team',
   'remove_team_member': 'manage_team',
+  'update_team_member': 'manage_team',
   'assign_roles': 'manage_team',
   'suspend_member': 'manage_team',
   'activate_member': 'manage_team',

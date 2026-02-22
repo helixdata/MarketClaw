@@ -185,6 +185,88 @@ export const removeTeamMemberTool: Tool = {
   },
 };
 
+// ============ Update Team Member ============
+export const updateTeamMemberTool: Tool = {
+  name: 'update_team_member',
+  description: 'Update a team member\'s details like name, email, or platform IDs (admin only)',
+  parameters: {
+    type: 'object',
+    properties: {
+      memberId: {
+        type: 'string',
+        description: 'Member ID to update',
+      },
+      telegramId: {
+        type: 'number',
+        description: 'Or: Telegram ID of member to update',
+      },
+      name: {
+        type: 'string',
+        description: 'New display name',
+      },
+      email: {
+        type: 'string',
+        description: 'New email address',
+      },
+      newTelegramId: {
+        type: 'number',
+        description: 'New Telegram ID',
+      },
+      newDiscordId: {
+        type: 'string',
+        description: 'New Discord ID',
+      },
+      newSlackId: {
+        type: 'string',
+        description: 'New Slack ID',
+      },
+    },
+  },
+
+  async execute(params): Promise<ToolResult> {
+    // Find the member
+    let member = params.memberId
+      ? teamManager.getMember(params.memberId)
+      : teamManager.findMember({ telegramId: params.telegramId });
+
+    if (!member) {
+      return { success: false, message: 'Member not found' };
+    }
+
+    // Build updates
+    const updates: Record<string, unknown> = {};
+    if (params.name) updates.name = params.name;
+    if (params.email) updates.email = params.email;
+    if (params.newTelegramId) updates.telegramId = params.newTelegramId;
+    if (params.newDiscordId) updates.discordId = params.newDiscordId;
+    if (params.newSlackId) updates.slackId = params.newSlackId;
+
+    if (Object.keys(updates).length === 0) {
+      return { success: false, message: 'No updates provided' };
+    }
+
+    const updated = await teamManager.updateMember(member.id, updates);
+
+    if (!updated) {
+      return { success: false, message: 'Failed to update member' };
+    }
+
+    const changes = Object.keys(updates).join(', ');
+    return {
+      success: true,
+      message: `✅ Updated ${updated.name}: ${changes}`,
+      data: {
+        id: updated.id,
+        name: updated.name,
+        email: updated.email,
+        telegramId: updated.telegramId,
+        discordId: updated.discordId,
+        slackId: updated.slackId,
+      },
+    };
+  },
+};
+
 // ============ Assign Role ============
 export const assignRoleTool: Tool = {
   name: 'assign_role',
@@ -579,6 +661,7 @@ export const teamTools: Tool[] = [
   listTeamTool,
   addTeamMemberTool,
   removeTeamMemberTool,
+  updateTeamMemberTool,
   assignRoleTool,
   listRolesTool,
   listPermissionsTool,

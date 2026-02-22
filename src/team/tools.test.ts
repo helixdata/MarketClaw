@@ -32,6 +32,7 @@ import {
   listTeamTool,
   addTeamMemberTool,
   removeTeamMemberTool,
+  updateTeamMemberTool,
   assignRoleTool,
   listRolesTool,
   whoHasPermissionTool,
@@ -65,11 +66,12 @@ describe('Team Tools', () => {
 
   describe('teamTools export', () => {
     it('should export all team tools', () => {
-      expect(teamTools).toHaveLength(12);
+      expect(teamTools).toHaveLength(13);
       expect(teamTools.map(t => t.name)).toEqual([
         'list_team',
         'add_team_member',
         'remove_team_member',
+        'update_team_member',
         'assign_role',
         'list_roles',
         'list_permissions',
@@ -410,6 +412,99 @@ describe('Team Tools', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe('Failed to remove member');
+    });
+  });
+
+  describe('updateTeamMemberTool', () => {
+    it('should have correct metadata', () => {
+      expect(updateTeamMemberTool.name).toBe('update_team_member');
+      expect(updateTeamMemberTool.description).toContain('Update');
+    });
+
+    it('should update member email', async () => {
+      const mockMember = createMockMember({ id: 'user_123', name: 'Test User' });
+      const updatedMember = { ...mockMember, email: 'new@example.com' };
+      (teamManager.getMember as Mock).mockReturnValue(mockMember);
+      (teamManager.updateMember as Mock).mockResolvedValue(updatedMember);
+
+      const result = await updateTeamMemberTool.execute({
+        memberId: 'user_123',
+        email: 'new@example.com',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Updated Test User');
+      expect(result.message).toContain('email');
+      expect(teamManager.updateMember).toHaveBeenCalledWith('user_123', { email: 'new@example.com' });
+    });
+
+    it('should update member name', async () => {
+      const mockMember = createMockMember({ id: 'user_123', name: 'Old Name' });
+      const updatedMember = { ...mockMember, name: 'New Name' };
+      (teamManager.getMember as Mock).mockReturnValue(mockMember);
+      (teamManager.updateMember as Mock).mockResolvedValue(updatedMember);
+
+      const result = await updateTeamMemberTool.execute({
+        memberId: 'user_123',
+        name: 'New Name',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Updated New Name');
+    });
+
+    it('should find member by telegramId', async () => {
+      const mockMember = createMockMember({ id: 'user_456', name: 'TG User' });
+      const updatedMember = { ...mockMember, email: 'tg@example.com' };
+      (teamManager.findMember as Mock).mockReturnValue(mockMember);
+      (teamManager.updateMember as Mock).mockResolvedValue(updatedMember);
+
+      const result = await updateTeamMemberTool.execute({
+        telegramId: 12345,
+        email: 'tg@example.com',
+      });
+
+      expect(result.success).toBe(true);
+      expect(teamManager.findMember).toHaveBeenCalledWith({ telegramId: 12345 });
+    });
+
+    it('should return error when member not found', async () => {
+      (teamManager.getMember as Mock).mockReturnValue(undefined);
+
+      const result = await updateTeamMemberTool.execute({
+        memberId: 'nonexistent',
+        email: 'test@example.com',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Member not found');
+    });
+
+    it('should return error when no updates provided', async () => {
+      const mockMember = createMockMember({ id: 'user_123' });
+      (teamManager.getMember as Mock).mockReturnValue(mockMember);
+
+      const result = await updateTeamMemberTool.execute({ memberId: 'user_123' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('No updates provided');
+    });
+
+    it('should update multiple fields at once', async () => {
+      const mockMember = createMockMember({ id: 'user_123', name: 'Test' });
+      const updatedMember = { ...mockMember, name: 'New Name', email: 'new@test.com' };
+      (teamManager.getMember as Mock).mockReturnValue(mockMember);
+      (teamManager.updateMember as Mock).mockResolvedValue(updatedMember);
+
+      const result = await updateTeamMemberTool.execute({
+        memberId: 'user_123',
+        name: 'New Name',
+        email: 'new@test.com',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('name');
+      expect(result.message).toContain('email');
     });
   });
 
