@@ -57,6 +57,7 @@ export interface TeamMember {
   preferences?: {
     voice?: 'professional' | 'casual' | 'friendly' | 'playful';
     defaultProduct?: string;
+    activeCampaign?: string;     // Active campaign for this member
     timezone?: string;
     notifyOn?: string[];         // Events to notify about
   };

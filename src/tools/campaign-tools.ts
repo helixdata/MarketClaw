@@ -6,6 +6,7 @@
 import { Tool, ToolResult } from './types.js';
 import { memory, Campaign, CampaignPost } from '../memory/index.js';
 import { costTracker } from '../costs/tracker.js';
+import { teamManager } from '../team/index.js';
 
 function generateId(): string {
   return `campaign_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -18,10 +19,10 @@ function generatePostId(): string {
 /**
  * Get or create a campaign for operations
  * - Uses provided campaignId if given
- * - Falls back to active campaign
+ * - Falls back to member's active campaign, then global active campaign
  * - Auto-creates default campaign if none exists
  */
-async function getOrCreateCampaign(campaignId?: string, productId?: string): Promise<{ campaign: Campaign; created: boolean } | { error: string }> {
+async function getOrCreateCampaign(campaignId?: string, productId?: string, callerTelegramId?: number): Promise<{ campaign: Campaign; created: boolean } | { error: string }> {
   // If campaignId provided, use it
   if (campaignId) {
     const campaign = await memory.getCampaign(campaignId);
@@ -31,7 +32,18 @@ async function getOrCreateCampaign(campaignId?: string, productId?: string): Pro
     return { campaign, created: false };
   }
 
-  // Check for active campaign
+  // Check member's active campaign first
+  if (callerTelegramId) {
+    const member = teamManager.findMember({ telegramId: callerTelegramId });
+    if (member?.preferences?.activeCampaign) {
+      const campaign = await memory.getCampaign(member.preferences.activeCampaign);
+      if (campaign) {
+        return { campaign, created: false };
+      }
+    }
+  }
+
+  // Check for global active campaign
   const state = await memory.getState();
   if (state.activeCampaign) {
     const campaign = await memory.getCampaign(state.activeCampaign);
@@ -394,6 +406,7 @@ const addCampaignPost: Tool = {
       channel: { type: 'string', description: 'Target channel (e.g., "twitter", "linkedin")' },
       content: { type: 'string', description: 'Post content' },
       scheduledAt: { type: 'string', description: 'When to publish (ISO 8601, optional)' },
+      callerTelegramId: { type: 'number', description: 'Telegram ID of the caller' },
     },
     required: ['channel', 'content'],
   },
@@ -403,8 +416,9 @@ const addCampaignPost: Tool = {
     channel: string;
     content: string;
     scheduledAt?: string;
+    callerTelegramId?: number;
   }): Promise<ToolResult> => {
-    const result = await getOrCreateCampaign(params.campaignId, params.productId);
+    const result = await getOrCreateCampaign(params.campaignId, params.productId, params.callerTelegramId);
     
     if ('error' in result) {
       return {
@@ -541,16 +555,20 @@ const updateCampaignPost: Tool = {
 
 const setActiveCampaign: Tool = {
   name: 'set_active_campaign',
-  description: 'Set the active campaign context. Subsequent operations will default to this campaign.',
+  description: 'Set the active campaign context for the current user. Subsequent operations will default to this campaign.',
   parameters: {
     type: 'object',
     properties: {
       campaignId: { type: 'string', description: 'Campaign ID to set as active (or null to clear)' },
+      callerTelegramId: { type: 'number', description: 'Telegram ID of the caller (for per-user storage)' },
     },
     required: ['campaignId'],
   },
-  execute: async (params: { campaignId: string | null }): Promise<ToolResult> => {
-    const state = await memory.getState();
+  execute: async (params: { campaignId: string | null; callerTelegramId?: number }): Promise<ToolResult> => {
+    // Try to store per-member if we have caller info
+    const member = params.callerTelegramId 
+      ? teamManager.findMember({ telegramId: params.callerTelegramId })
+      : undefined;
 
     if (params.campaignId) {
       const campaign = await memory.getCampaign(params.campaignId);
@@ -562,20 +580,34 @@ const setActiveCampaign: Tool = {
         };
       }
 
-      state.activeCampaign = params.campaignId;
-      await memory.saveState(state);
+      // Store per-member if possible, otherwise global
+      if (member) {
+        const preferences = { ...member.preferences, activeCampaign: params.campaignId };
+        await teamManager.updateMember(member.id, { preferences });
+      } else {
+        const state = await memory.getState();
+        state.activeCampaign = params.campaignId;
+        await memory.saveState(state);
+      }
 
       return {
         success: true,
-        message: `Active campaign set to "${campaign.name}"`,
+        message: `Active campaign set to "${campaign.name}"${member ? ` for ${member.name}` : ''}`,
         data: {
           campaignId: campaign.id,
           campaignName: campaign.name,
         },
       };
     } else {
-      state.activeCampaign = undefined;
-      await memory.saveState(state);
+      // Clear active campaign
+      if (member) {
+        const preferences = { ...member.preferences, activeCampaign: undefined };
+        await teamManager.updateMember(member.id, { preferences });
+      } else {
+        const state = await memory.getState();
+        state.activeCampaign = undefined;
+        await memory.saveState(state);
+      }
 
       return {
         success: true,

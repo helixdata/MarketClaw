@@ -116,8 +116,9 @@ MarketClaw creates a task that:
 | `update_campaign` | Update campaign status/details |
 | `delete_campaign` | Delete a campaign |
 | `add_campaign_post` | Add content to a campaign |
+| `get_campaign_post` | Get full post content (not truncated) |
 | `update_campaign_post` | Update a post in a campaign |
-| `set_active_campaign` | Set active campaign context |
+| `set_active_campaign` | Set active campaign (per-member) |
 | `get_campaign_metrics` | Get aggregated metrics + costs |
 | `get_campaign_costs` | Detailed cost breakdown |
 
@@ -127,6 +128,8 @@ User: "Draft a tweet for ProofPing"
 → Auto-creates "ProofPing — General" campaign
 → Adds post to it
 ```
+
+**Per-member active campaigns:** Each team member has their own active campaign context. Setting your active campaign doesn't affect other team members.
 
 ### 👥 Leads Tools
 
