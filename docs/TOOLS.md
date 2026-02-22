@@ -146,6 +146,7 @@ User: "Draft a tweet for ProofPing"
 | `update_calendar_event` | Update an existing event |
 | `delete_calendar_event` | Delete an event |
 | `list_calendars` | List available calendars |
+| `create_calendar` | Create a new calendar (for product-specific use) |
 | `google_calendar_auth` | Authenticate with Google Calendar |
 
 Calendar tools support product-specific calendars. See [CALENDAR.md](./CALENDAR.md) for full setup and configuration.
@@ -153,6 +154,7 @@ Calendar tools support product-specific calendars. See [CALENDAR.md](./CALENDAR.
 **Examples:**
 - "What's on my calendar tomorrow?"
 - "Schedule a launch meeting for Monday 2pm"
+- "Create a calendar for ProofPing"
 - "Delete the team sync event"
 
 ### ⚙️ Config Tools

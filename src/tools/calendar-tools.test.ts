@@ -9,6 +9,7 @@ import {
   updateCalendarEventTool,
   deleteCalendarEventTool,
   listCalendarsTool,
+  createCalendarTool,
   googleCalendarAuthTool,
 } from './calendar-tools.js';
 
@@ -489,6 +490,107 @@ describe('Calendar Tools', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('No calendars found.');
       expect(result.data).toEqual([]);
+    });
+  });
+
+  // ============ create_calendar ============
+  describe('create_calendar', () => {
+    it('should create a new calendar successfully', async () => {
+      const mockCalendar = {
+        calendars: {
+          insert: vi.fn().mockResolvedValue({
+            data: {
+              id: 'abc123@group.calendar.google.com',
+              summary: 'ProofPing Marketing',
+              description: 'Marketing calendar for ProofPing',
+              timeZone: 'America/New_York',
+            },
+          }),
+        },
+      };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockCalendar as any);
+
+      const result = await createCalendarTool.execute({
+        name: 'ProofPing Marketing',
+        description: 'Marketing calendar for ProofPing',
+        timeZone: 'America/New_York',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Created calendar');
+      expect(result.message).toContain('ProofPing Marketing');
+      expect(result.data.id).toBe('abc123@group.calendar.google.com');
+      expect(result.data.name).toBe('ProofPing Marketing');
+      expect(result.data.timeZone).toBe('America/New_York');
+      expect(result.data.configHint).toContain('abc123@group.calendar.google.com');
+    });
+
+    it('should use UTC as default timezone', async () => {
+      const mockCalendar = {
+        calendars: {
+          insert: vi.fn().mockResolvedValue({
+            data: {
+              id: 'newcal@group.calendar.google.com',
+              summary: 'My Calendar',
+              timeZone: 'UTC',
+            },
+          }),
+        },
+      };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockCalendar as any);
+
+      await createCalendarTool.execute({ name: 'My Calendar' });
+
+      expect(mockCalendar.calendars.insert).toHaveBeenCalledWith({
+        requestBody: {
+          summary: 'My Calendar',
+          description: undefined,
+          timeZone: 'UTC',
+        },
+      });
+    });
+
+    it('should fail when not authenticated', async () => {
+      vi.mocked(isAuthenticated).mockResolvedValue(false);
+
+      const result = await createCalendarTool.execute({ name: 'Test Calendar' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('not authenticated');
+    });
+
+    it('should handle API errors gracefully', async () => {
+      const mockCalendar = {
+        calendars: {
+          insert: vi.fn().mockRejectedValue(new Error('Quota exceeded')),
+        },
+      };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockCalendar as any);
+
+      const result = await createCalendarTool.execute({ name: 'Test Calendar' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to create calendar');
+      expect(result.message).toContain('Quota exceeded');
+    });
+
+    it('should include config hint in response', async () => {
+      const mockCalendar = {
+        calendars: {
+          insert: vi.fn().mockResolvedValue({
+            data: {
+              id: 'product-cal@group.calendar.google.com',
+              summary: 'Product Calendar',
+            },
+          }),
+        },
+      };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockCalendar as any);
+
+      const result = await createCalendarTool.execute({ name: 'Product Calendar' });
+
+      expect(result.data.configHint).toContain('calendarId');
+      expect(result.data.configHint).toContain('product-cal@group.calendar.google.com');
     });
   });
 

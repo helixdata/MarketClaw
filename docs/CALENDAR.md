@@ -229,6 +229,28 @@ MarketClaw: 📋 Found 3 calendar(s):
 • Marketing Team — reader
 ```
 
+### create_calendar
+
+Create a new Google Calendar. Useful for creating product-specific calendars.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | ✅ | Name for the calendar |
+| `description` | string | | Calendar description |
+| `timeZone` | string | | Time zone (default: UTC) |
+
+**Example:**
+```
+You: "Create a calendar for ProofPing"
+
+MarketClaw: ✅ Created calendar "ProofPing"
+📆 ID: abc123@group.calendar.google.com
+💡 Add to product config: "calendar": { "calendarId": "abc123@group.calendar.google.com" }
+```
+
+The returned calendar ID can be added to your product's `tools.json` to use it as the default for that product.
+
 ### google_calendar_auth
 
 Manage Google Calendar authentication.

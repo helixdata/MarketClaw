@@ -539,6 +539,72 @@ export const listCalendarsTool: Tool = {
   },
 };
 
+// ============ Create Calendar ============
+export const createCalendarTool: Tool = {
+  name: 'create_calendar',
+  description: 'Create a new Google Calendar. Returns the calendar ID which can be used in product config.',
+  parameters: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name for the new calendar (e.g., "ProofPing Marketing")',
+      },
+      description: {
+        type: 'string',
+        description: 'Description of the calendar (optional)',
+      },
+      timeZone: {
+        type: 'string',
+        description: 'Time zone (e.g., "America/New_York", default: UTC)',
+      },
+    },
+    required: ['name'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    if (!await isAuthenticated()) {
+      return {
+        success: false,
+        message: 'Google Calendar not authenticated. Use google_calendar_auth to connect your account.',
+      };
+    }
+
+    try {
+      const calendar = await getCalendarClient();
+
+      const response = await calendar.calendars.insert({
+        requestBody: {
+          summary: params.name,
+          description: params.description,
+          timeZone: params.timeZone || 'UTC',
+        },
+      });
+
+      const newCalendar = response.data;
+
+      return {
+        success: true,
+        message: `Created calendar "${params.name}"`,
+        data: {
+          id: newCalendar.id,
+          name: newCalendar.summary,
+          description: newCalendar.description,
+          timeZone: newCalendar.timeZone,
+          // Hint for user
+          configHint: `Add to product config: "calendar": { "calendarId": "${newCalendar.id}" }`,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        message: `Failed to create calendar: ${message}`,
+      };
+    }
+  },
+};
+
 // ============ Google Calendar Auth ============
 export const googleCalendarAuthTool: Tool = {
   name: 'google_calendar_auth',
@@ -625,5 +691,6 @@ export const calendarTools: Tool[] = [
   updateCalendarEventTool,
   deleteCalendarEventTool,
   listCalendarsTool,
+  createCalendarTool,
   googleCalendarAuthTool,
 ];
