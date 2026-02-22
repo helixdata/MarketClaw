@@ -10,7 +10,6 @@ import path from 'path';
 import { homedir } from 'os';
 // Fall back to file storage (simpler and more reliable)
 
-const SERVICE_NAME = 'marketclaw';
 const CONFIG_DIR = path.join(homedir(), '.marketclaw');
 const AUTH_FILE = path.join(CONFIG_DIR, 'auth.json');
 

@@ -4,8 +4,8 @@
  */
 
 import { Command } from 'commander';
-import { loadConfig, saveConfig, getConfigPath, Config } from './config/index.js';
-import { storeApiKey, storeOAuthToken, promptForSetupToken, listProfiles } from './auth/index.js';
+import { loadConfig, getConfigPath } from './config/index.js';
+import { promptForSetupToken, listProfiles } from './auth/index.js';
 import { providers, PROVIDER_INFO } from './providers/index.js';
 import { memory } from './memory/index.js';
 import { knowledge } from './knowledge/index.js';
@@ -15,7 +15,6 @@ import { startAgent } from './index.js';
 import { runSetup } from './setup.js';
 import { skillLoader } from './skills/loader.js';
 import chalk from 'chalk';
-import { createInterface } from 'readline';
 
 const program = new Command();
 

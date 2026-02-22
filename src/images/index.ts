@@ -20,7 +20,6 @@ import { finished } from 'stream/promises';
 
 import type {
   ProductImage,
-  ImageType,
   ImageSearchResult,
   ImageFilters,
   ImageMetadataInput,

@@ -3,13 +3,13 @@
  * Loads sub-agents from config, built-ins, and modular files
  */
 
-import { readFile, readdir, mkdir } from 'fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 import { subAgentRegistry } from './registry.js';
 import { builtinSpecialists } from './specialists.js';
-import { SubAgentManifest, SubAgentConfig, AgentIdentity } from './types.js';
+import { SubAgentManifest, AgentIdentity } from './types.js';
 import pino from 'pino';
 
 const logger = pino({ name: 'agent-loader' });
@@ -186,7 +186,7 @@ export async function createCustomAgent(manifest: SubAgentManifest): Promise<voi
   await mkdir(agentDir, { recursive: true });
 
   const manifestPath = path.join(agentDir, 'manifest.json');
-  await require('fs/promises').writeFile(
+  await writeFile(
     manifestPath,
     JSON.stringify(manifest, null, 2)
   );

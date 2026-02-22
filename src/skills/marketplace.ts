@@ -3,14 +3,14 @@
  * Install and manage skills from registry
  */
 
-import { mkdir, writeFile, readFile } from 'fs/promises';
+import { mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { Tool, ToolResult } from '../tools/types.js';
 import { skillLoader } from './loader.js';
-import { SkillManifest, SkillRegistryEntry, SkillInstallResult } from './types.js';
+import { SkillManifest, SkillRegistryEntry } from './types.js';
 
 const SKILLS_DIR = path.join(homedir(), '.marketclaw', 'skills');
 

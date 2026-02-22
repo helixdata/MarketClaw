@@ -3,7 +3,7 @@
  * Modular, installable capabilities for MarketClaw
  */
 
-import { Tool, ToolResult } from '../tools/types.js';
+import { Tool } from '../tools/types.js';
 
 /**
  * Skill manifest (skill.json)

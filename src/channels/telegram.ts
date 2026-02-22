@@ -140,7 +140,7 @@ export class TelegramChannel implements Channel {
 
     try {
       const testBot = new Telegraf(token);
-      const me = await testBot.telegram.getMe();
+      await testBot.telegram.getMe();
       return { valid: true };
     } catch (err: any) {
       return { valid: false, error: `Invalid token: ${err.message}` };
@@ -354,7 +354,7 @@ export class TelegramChannel implements Channel {
         await ctx.sendChatAction('typing');
 
         let images: ChannelImage[] = [];
-        let documents: ChannelDocument[] = [];
+        const documents: ChannelDocument[] = [];
 
         // Handle image documents
         if (mimeType.startsWith('image/')) {

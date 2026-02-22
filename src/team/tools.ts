@@ -5,7 +5,6 @@
 
 import { Tool, ToolResult } from '../tools/types.js';
 import { teamManager } from './manager.js';
-import { BUILTIN_ROLES } from './types.js';
 
 // ============ List Team ============
 export const listTeamTool: Tool = {
@@ -214,7 +213,7 @@ export const assignRoleTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId 
+    const member = params.memberId 
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 
@@ -505,7 +504,7 @@ export const updateMemberPreferencesTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId
+    const member = params.memberId
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 
@@ -558,7 +557,7 @@ export const rememberMemberTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
-    let member = params.memberId
+    const member = params.memberId
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 
