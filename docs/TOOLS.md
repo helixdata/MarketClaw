@@ -21,9 +21,8 @@ Each tool has:
 
 | Tool | Description |
 |------|-------------|
-| `schedule_post` | Schedule a post for later |
-| `schedule_reminder` | Set a reminder |
-| `schedule_task` | Schedule an automated AI task (see below) |
+| `schedule_task` | Schedule any automated AI task (posts, emails, reports, etc.) |
+| `schedule_reminder` | Set a simple reminder |
 | `list_scheduled_jobs` | List all scheduled jobs |
 | `cancel_scheduled_job` | Cancel a scheduled job |
 | `pause_scheduled_job` | Pause a job |
@@ -32,29 +31,30 @@ Each tool has:
 
 #### Automated Tasks
 
-The `schedule_task` tool lets you schedule tasks that the AI will actually **execute**, not just remind you about.
+The `schedule_task` tool is the **primary scheduling tool**. It schedules tasks that the AI will actually **execute**, not just remind you about. Use it for everything: social posts, emails, reports, inbox monitoring, etc.
 
 ```
-User: "Check my inbox every hour and respond to leads"
+User: "Post to Twitter every day at 9am with a tip"
 
 MarketClaw creates a task that:
-1. Runs every hour
+1. Runs every day at 9am
 2. Invokes the AI with the task prompt
-3. AI uses tools (check_imap_inbox, reply_imap_email, etc.)
+3. AI uses tools (post_tweet, etc.) to complete the task
 4. Notifies you of the results
 ```
 
 **Parameters:**
-- `name` — Name for the task (e.g., "Email Auto-Responder")
-- `task` — What the AI should do
+- `name` — Name for the task (e.g., "Daily Twitter Post")
+- `task` — What the AI should do (e.g., "Post a helpful tip about uptime monitoring to Twitter")
 - `when` — Schedule (e.g., "every hour", "every day at 9am")
 - `productId` — Product context (optional)
 - `campaignId` — Campaign context (optional)
 - `notify` — Send results to user (default: true)
 
 **Examples:**
+- "Post to Twitter every morning at 9am with a tip about ProofPing"
+- "Send daily summary email to brett@example.com at 6pm"
 - "Check inbox and respond to leads every 30 minutes"
-- "Post a daily tip to Twitter at 9am"
 - "Generate weekly campaign report every Monday"
 
 ### 📚 Knowledge Tools
@@ -315,9 +315,9 @@ interface ToolResult {
 ```
 User: "Schedule a tweet about our launch for tomorrow 9am"
   ↓
-AI: tool_call(schedule_post, {channel: 'twitter', content: '...', time: '...'})
+AI: tool_call(schedule_task, {name: 'Launch Tweet', task: 'Post to Twitter: ...', when: 'tomorrow at 9am'})
   ↓
-Tool: Executes, returns {success: true, message: 'Scheduled for...', data: {id: '123'}}
+Tool: Executes, returns {success: true, message: 'Scheduled...', data: {jobId: '123'}}
   ↓
 AI: "Done! I've scheduled your tweet for tomorrow at 9am."
 ```

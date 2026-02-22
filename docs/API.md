@@ -19,16 +19,18 @@ Complete reference for all MarketClaw tools and their parameters.
 
 ## Scheduling
 
-### `schedule_post`
+### `schedule_task`
 
-Schedule a social media post for later.
+Schedule any automated task for the AI to execute. Use this for everything: social posts, emails, reports, inbox monitoring, etc.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `content` | string | Yes | Post content |
-| `schedule` | string | Yes | When to post (e.g., "tomorrow 9am", "in 2 hours") |
-| `channel` | string | No | Target channel (twitter, linkedin) |
-| `productId` | string | No | Associated product |
+| `name` | string | Yes | Name for the task (e.g., "Daily Twitter Post") |
+| `task` | string | Yes | What the AI should do (e.g., "Post to Twitter: [content]") |
+| `when` | string | Yes | When to run (e.g., "every day at 9am", "in 2 hours") |
+| `productId` | string | No | Product context |
+| `campaignId` | string | No | Campaign context |
+| `notify` | boolean | No | Send notification on completion (default: true) |
 
 ### `schedule_reminder`
 

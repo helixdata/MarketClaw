@@ -4,7 +4,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  schedulePostTool,
   scheduleReminderTool,
   scheduleTaskTool,
   listJobsTool,
@@ -59,100 +58,6 @@ function createMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
 describe('Scheduler Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  // ============ schedule_post ============
-  describe('schedule_post', () => {
-    it('schedules a post successfully', async () => {
-      const mockJob = createMockJob({ id: 'job_abc123' });
-      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 9 * * *');
-      vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
-
-      const result = await schedulePostTool.execute({
-        content: 'Hello Twitter!',
-        channel: 'twitter',
-        when: 'at 09:00',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.message).toContain('Scheduled post to twitter');
-      expect(result.message).toContain('job_abc123');
-      expect(result.data).toEqual({
-        jobId: 'job_abc123',
-        schedule: '0 9 * * *',
-      });
-
-      expect(scheduler.addJob).toHaveBeenCalledWith({
-        name: 'Post to twitter',
-        description: 'Hello Twitter!',
-        cronExpression: '0 9 * * *',
-        type: 'post',
-        enabled: true,
-        payload: {
-          channel: 'twitter',
-          content: 'Hello Twitter!',
-          productId: undefined,
-          campaignId: undefined,
-        },
-      });
-    });
-
-    it('includes productId and campaignId when provided', async () => {
-      const mockJob = createMockJob();
-      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 9 * * *');
-      vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
-
-      await schedulePostTool.execute({
-        content: 'Product launch!',
-        channel: 'linkedin',
-        when: 'at 10:00',
-        productId: 'prod_123',
-        campaignId: 'camp_456',
-      });
-
-      expect(scheduler.addJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            productId: 'prod_123',
-            campaignId: 'camp_456',
-          }),
-        })
-      );
-    });
-
-    it('returns error for invalid schedule', async () => {
-      vi.mocked(Scheduler.parseToCron).mockReturnValue(null);
-
-      const result = await schedulePostTool.execute({
-        content: 'Hello!',
-        channel: 'twitter',
-        when: 'gibberish schedule',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Could not parse schedule');
-      expect(result.message).toContain('gibberish schedule');
-      expect(scheduler.addJob).not.toHaveBeenCalled();
-    });
-
-    it('truncates long content in description', async () => {
-      const longContent = 'A'.repeat(200);
-      const mockJob = createMockJob();
-      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 9 * * *');
-      vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
-
-      await schedulePostTool.execute({
-        content: longContent,
-        channel: 'twitter',
-        when: 'at 09:00',
-      });
-
-      expect(scheduler.addJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          description: 'A'.repeat(100), // Truncated to 100 chars
-        })
-      );
-    });
   });
 
   // ============ schedule_reminder ============
@@ -513,18 +418,6 @@ describe('Scheduler Tools', () => {
 
   // ============ Tool Metadata ============
   describe('Tool Metadata', () => {
-    it('schedule_post has correct definition', () => {
-      expect(schedulePostTool.name).toBe('schedule_post');
-      expect(schedulePostTool.parameters.required).toContain('content');
-      expect(schedulePostTool.parameters.required).toContain('channel');
-      expect(schedulePostTool.parameters.required).toContain('when');
-      expect(schedulePostTool.parameters.properties.channel.enum).toEqual([
-        'twitter',
-        'linkedin',
-        'telegram',
-      ]);
-    });
-
     it('schedule_reminder has correct definition', () => {
       expect(scheduleReminderTool.name).toBe('schedule_reminder');
       expect(scheduleReminderTool.parameters.required).toContain('message');

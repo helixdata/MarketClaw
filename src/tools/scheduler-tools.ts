@@ -5,155 +5,6 @@
 
 import { Tool, ToolResult } from './types.js';
 import { scheduler, Scheduler } from '../scheduler/index.js';
-import { loadConfig } from '../config/index.js';
-import { isAuthenticated as isCalendarAuthenticated, getCalendarClient } from '../auth/google-calendar.js';
-
-// ============ Schedule Post ============
-export const schedulePostTool: Tool = {
-  name: 'schedule_post',
-  description: 'Schedule a social media post for later. Supports Twitter, LinkedIn, Telegram.',
-  parameters: {
-    type: 'object',
-    properties: {
-      content: { type: 'string', description: 'The post content' },
-      channel: { 
-        type: 'string', 
-        enum: ['twitter', 'linkedin', 'telegram'],
-        description: 'Where to post' 
-      },
-      when: { 
-        type: 'string', 
-        description: 'When to post (e.g., "at 09:00", "every day", "in 2 hours", or cron expression)' 
-      },
-      productId: { type: 'string', description: 'Associated product ID (optional)' },
-      campaignId: { type: 'string', description: 'Associated campaign ID (optional)' },
-    },
-    required: ['content', 'channel', 'when'],
-  },
-
-  async execute(params): Promise<ToolResult> {
-    const cronExpression = Scheduler.parseToCron(params.when);
-    
-    if (!cronExpression) {
-      return {
-        success: false,
-        message: `Could not parse schedule "${params.when}". Try formats like "every day", "at 09:00", "every 2 hours", or a cron expression.`,
-      };
-    }
-
-    const job = await scheduler.addJob({
-      name: `Post to ${params.channel}`,
-      description: params.content.slice(0, 100),
-      cronExpression,
-      type: 'post',
-      enabled: true,
-      payload: {
-        channel: params.channel,
-        content: params.content,
-        productId: params.productId,
-        campaignId: params.campaignId,
-      },
-    });
-
-    let calendarEventCreated = false;
-    let calendarEventId: string | undefined;
-
-    // Optionally create calendar event
-    try {
-      const config = await loadConfig();
-      const shouldCreateEvent = config?.calendar?.createEventsForScheduledPosts ?? false;
-      
-      if (shouldCreateEvent && await isCalendarAuthenticated()) {
-        const calendar = await getCalendarClient();
-        
-        // Parse the schedule to get approximate next run time
-        // For simple "at HH:MM" schedules, calculate next occurrence
-        const nextRunTime = calculateNextRunTime(params.when);
-        
-        if (nextRunTime) {
-          const event = await calendar.events.insert({
-            calendarId: config?.calendar?.calendarId || 'primary',
-            requestBody: {
-              summary: `📱 Scheduled: Post to ${params.channel}`,
-              description: params.content,
-              start: {
-                dateTime: nextRunTime.toISOString(),
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              },
-              end: {
-                dateTime: new Date(nextRunTime.getTime() + 15 * 60 * 1000).toISOString(),
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              },
-            },
-          });
-          calendarEventCreated = true;
-          calendarEventId = event.data.id ?? undefined;
-        }
-      }
-    } catch {
-      // Calendar event creation is optional, don't fail the whole operation
-    }
-
-    let message = `Scheduled post to ${params.channel}. Job ID: ${job.id}`;
-    if (calendarEventCreated) {
-      message += '\n📅 Calendar event created.';
-    }
-
-    return {
-      success: true,
-      message,
-      data: { jobId: job.id, schedule: cronExpression, calendarEventId },
-    };
-  },
-};
-
-/**
- * Calculate approximate next run time from a schedule string
- */
-function calculateNextRunTime(when: string): Date | null {
-  const lower = when.toLowerCase().trim();
-  const now = new Date();
-  
-  // "at HH:MM" pattern
-  const timeMatch = lower.match(/at (\d{1,2}):(\d{2})/);
-  if (timeMatch) {
-    const hours = parseInt(timeMatch[1], 10);
-    const minutes = parseInt(timeMatch[2], 10);
-    const next = new Date(now);
-    next.setHours(hours, minutes, 0, 0);
-    
-    // If time already passed today, schedule for tomorrow
-    if (next <= now) {
-      next.setDate(next.getDate() + 1);
-    }
-    return next;
-  }
-  
-  // "in X hours/minutes" pattern
-  const inMatch = lower.match(/in (\d+) (hour|minute|min)/);
-  if (inMatch) {
-    const amount = parseInt(inMatch[1], 10);
-    const unit = inMatch[2];
-    const ms = unit.startsWith('hour') ? amount * 60 * 60 * 1000 : amount * 60 * 1000;
-    return new Date(now.getTime() + ms);
-  }
-  
-  // "tomorrow" pattern
-  if (lower.includes('tomorrow')) {
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const timeInTomorrow = lower.match(/(\d{1,2}):(\d{2})/);
-    if (timeInTomorrow) {
-      tomorrow.setHours(parseInt(timeInTomorrow[1], 10), parseInt(timeInTomorrow[2], 10), 0, 0);
-    } else {
-      tomorrow.setHours(9, 0, 0, 0); // Default to 9am
-    }
-    return tomorrow;
-  }
-  
-  return null;
-}
 
 // ============ Schedule Reminder ============
 export const scheduleReminderTool: Tool = {
@@ -338,7 +189,7 @@ export const runJobNowTool: Tool = {
 // ============ Schedule Automated Task ============
 export const scheduleTaskTool: Tool = {
   name: 'schedule_task',
-  description: 'Schedule an automated task that the AI will execute on a schedule. The AI will use tools to complete the task. Examples: "Check inbox and respond to leads", "Post a daily tip to Twitter", "Generate and send weekly report".',
+  description: 'Schedule any automated task for the AI to execute on a schedule. Use this for EVERYTHING: social media posts, emails, reports, inbox checks, reminders with actions, etc. The AI will use tools to complete the task. Examples: "Post to Twitter: [content]", "Send daily summary email to brett@example.com", "Check inbox and respond to leads".',
   parameters: {
     type: 'object',
     properties: {
@@ -403,7 +254,6 @@ export const scheduleTaskTool: Tool = {
 
 // ============ Export All ============
 export const schedulerTools: Tool[] = [
-  schedulePostTool,
   scheduleReminderTool,
   scheduleTaskTool,
   listJobsTool,
