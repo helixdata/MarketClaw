@@ -241,10 +241,77 @@ export const runJobNowTool: Tool = {
   },
 };
 
+// ============ Schedule Automated Task ============
+export const scheduleTaskTool: Tool = {
+  name: 'schedule_task',
+  description: 'Schedule an automated task that the AI will execute on a schedule. The AI will use tools to complete the task. Examples: "Check inbox and respond to leads", "Post a daily tip to Twitter", "Generate and send weekly report".',
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Name for this task (e.g., "Email Auto-Responder")' },
+      task: { 
+        type: 'string', 
+        description: 'What the AI should do (e.g., "Check my inbox for new emails from leads and draft responses")' 
+      },
+      when: { 
+        type: 'string', 
+        description: 'When to run (e.g., "every hour", "every day at 9am", "every 30 minutes")' 
+      },
+      productId: { type: 'string', description: 'Product context for the task (optional)' },
+      campaignId: { type: 'string', description: 'Campaign context for the task (optional)' },
+      notify: { 
+        type: 'boolean', 
+        description: 'Whether to send notification when task completes (default: true)' 
+      },
+    },
+    required: ['name', 'task', 'when'],
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const cronExpression = Scheduler.parseToCron(params.when);
+    
+    if (!cronExpression) {
+      return {
+        success: false,
+        message: `Could not parse schedule "${params.when}". Try formats like "every hour", "every day at 09:00", "every 30 minutes", or a cron expression.`,
+      };
+    }
+
+    const job = await scheduler.addJob({
+      name: params.name,
+      description: params.task.slice(0, 200),
+      cronExpression,
+      type: 'task',
+      enabled: true,
+      payload: {
+        content: params.task,
+        productId: params.productId,
+        campaignId: params.campaignId,
+        metadata: { 
+          notify: params.notify !== false,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: `Automated task "${params.name}" scheduled. The AI will execute this task ${params.when}.`,
+      data: { 
+        jobId: job.id, 
+        name: params.name,
+        task: params.task,
+        schedule: cronExpression,
+        notify: params.notify !== false,
+      },
+    };
+  },
+};
+
 // ============ Export All ============
 export const schedulerTools: Tool[] = [
   schedulePostTool,
   scheduleReminderTool,
+  scheduleTaskTool,
   listJobsTool,
   cancelJobTool,
   pauseJobTool,

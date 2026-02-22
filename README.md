@@ -30,6 +30,7 @@ MarketClaw is an AI marketing assistant that:
 - 📊 **Manages campaigns** — Organize posts, track metrics, measure ROI
 - 💰 **Tracks costs** — Know exactly what you're spending per campaign
 - ⏰ **Schedules posts** — Set it and forget it
+- 🤖 **Automates tasks** — "Check inbox every hour and respond to leads"
 - 🔌 **Pluggable** — Swap AI providers, add skills, customize tools
 
 Think of it as your marketing co-pilot that's always on, always learning, and never forgets a campaign.
