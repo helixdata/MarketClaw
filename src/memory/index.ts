@@ -82,6 +82,7 @@ export interface CampaignPost {
   publishedAt?: number;
   status: 'draft' | 'scheduled' | 'published' | 'failed';
   externalId?: string;
+  externalUrl?: string;
   metrics?: {
     impressions?: number;
     clicks?: number;
