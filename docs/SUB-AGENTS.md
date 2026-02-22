@@ -21,6 +21,7 @@ Sub-agents are specialists with their own:
 | `analyst` | 📊 | Dash | Metrics, performance analysis |
 | `researcher` | 🔍 | Scout | Market research, competitor intel |
 | `producthunt` | 🚀 | Hunter | Product Hunt launches |
+| `audience` | 🎯 | Radar | Audience discovery, community hunting |
 
 ## Using Sub-Agents
 
@@ -28,7 +29,7 @@ Sub-agents are specialists with their own:
 
 ```
 You: What agents do I have?
-Bot: 7 agents available:
+Bot: 8 agents available:
      🐦 Tweety - Twitter/X Specialist
      💼 Quinn - LinkedIn Specialist
      ✉️ Emma - Email Specialist
@@ -36,6 +37,7 @@ Bot: 7 agents available:
      📊 Dash - Analytics Specialist
      🔍 Scout - Research Specialist
      🚀 Hunter - Product Hunt Specialist
+     🎯 Radar - Audience Researcher
 ```
 
 ### Delegate a Task
@@ -193,6 +195,7 @@ Bot: 💼 Quinn now uses: default (global)
 | 📊 Dash | Default | Analysis needs reasoning |
 | 🔍 Scout | `claude-3-opus` | Deep research benefits |
 | 🚀 Hunter | Default | Launch content is critical |
+| 🎯 Radar | `claude-3-opus` | Deep research + synthesis |
 
 ### Create Agent with Model
 
@@ -268,4 +271,34 @@ Bot: ✉️ Emma completed the task:
      Hi [Name],
 
      I noticed [Company] is doing X. We just shipped something that might help...
+```
+
+### Audience Research
+
+```
+You: Ask Radar to find where DevOps engineers discuss uptime monitoring
+
+Bot: 🎯 Radar completed the task:
+
+     ## Communities Found
+     
+     **High Activity:**
+     - r/devops (2.1M members) - frequent "what monitoring tool" threads
+     - r/sysadmin (850K) - lots of complaints about existing tools
+     - DevOps Discord (45K) - #monitoring channel active daily
+     
+     **Key Pain Points (verbatim quotes):**
+     - "PagerDuty pricing is insane once you scale"
+     - "I just want something that works without 30 integrations"
+     - "Why do all these tools require a PhD to configure?"
+     
+     **Persona Draft:**
+     - Role: SRE / DevOps Engineer at 50-200 person startup
+     - Trigger: Gets woken up by false alarm, decides to switch tools
+     - Language: "uptime monitoring", "alerting", "on-call rotation"
+     
+     **Quick Wins:**
+     1. Answer questions in r/devops weekly "what tools" thread
+     2. Join DevOps Discord, lurk for a week, then engage
+     3. Search "alternative to PagerDuty" for warm leads
 ```
