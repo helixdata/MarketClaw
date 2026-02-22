@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Ignore transitive deps that can't be directly updated
+    ignore:
+      - dependency-name: "minimatch"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "undici"
+        update-types: ["version-update:semver-major"]
+    # Group minor/patch updates to reduce PR noise
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
