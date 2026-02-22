@@ -240,35 +240,30 @@ export class TelegramChannel implements Channel {
   private setupHandlers(): void {
     if (!this.bot || !this.config) return;
 
-    // Auth middleware - check allowedUsers config OR team membership
+    // Auth middleware - team membership is required
+    // allowedUsers config acts as a pre-filter (if configured)
     this.bot.use(async (ctx, next) => {
       const userId = ctx.from?.id;
       if (!userId) return;
 
-      // Check 1: Is user in config allowedUsers?
-      const inAllowedUsers = this.config!.allowedUsers?.includes(userId);
-      
-      // Check 2: Is user a team member?
-      const isTeamMember = teamManager.findMember({ telegramId: userId }) !== undefined;
-
-      // Allow if either check passes
-      // If allowedUsers is not configured (empty/undefined), only team membership matters
+      // Check 1: If allowedUsers configured, user must be in it
       const hasAllowedUsersConfig = this.config!.allowedUsers && this.config!.allowedUsers.length > 0;
-      
-      if (hasAllowedUsersConfig) {
-        // Config exists: allow if in allowedUsers OR is team member
-        if (!inAllowedUsers && !isTeamMember) {
-          logger.warn({ userId }, 'Unauthorized user attempted access');
-          await ctx.reply('🚫 Unauthorized. Contact admin for access.');
-          return;
-        }
-      } else {
-        // No config: only allow team members (prevents open access)
-        if (!isTeamMember) {
-          logger.warn({ userId }, 'Non-team-member attempted access (no allowedUsers configured)');
-          await ctx.reply('🚫 Unauthorized. Contact admin for access.');
-          return;
-        }
+      if (hasAllowedUsersConfig && !this.config!.allowedUsers!.includes(userId)) {
+        logger.warn({ userId }, 'User not in allowedUsers');
+        await ctx.reply('🚫 Unauthorized. Contact admin for access.');
+        return;
+      }
+
+      // Check 2: User must be a team member
+      const isTeamMember = teamManager.findMember({ telegramId: userId }) !== undefined;
+      if (!isTeamMember) {
+        logger.warn({ userId, inAllowedUsers: hasAllowedUsersConfig }, 'User not a team member');
+        await ctx.reply(
+          '👋 Hi! You\'re not set up as a team member yet.\n\n' +
+          'Ask an admin to add you with:\n' +
+          `"Add [your name] as viewer with telegram ID ${userId}"`
+        );
+        return;
       }
 
       await next();
