@@ -378,6 +378,24 @@ export class SlackChannel implements Channel {
           text: response.text,
           thread_ts: event.thread_ts || event.ts,
         });
+
+        // Send any file attachments
+        if (response.attachments && response.attachments.length > 0) {
+          for (const attachment of response.attachments) {
+            try {
+              await this.app!.client.files.uploadV2({
+                channel_id: event.channel,
+                file: attachment.buffer,
+                filename: attachment.filename,
+                title: attachment.caption || attachment.filename,
+                thread_ts: event.thread_ts || event.ts,
+              });
+              logger.info({ filename: attachment.filename }, 'Sent Slack attachment');
+            } catch (err) {
+              logger.error({ err, filename: attachment.filename }, 'Failed to send Slack attachment');
+            }
+          }
+        }
       }
     } catch (error) {
       logger.error({ error, userId: message.userId }, 'Error processing Slack message');

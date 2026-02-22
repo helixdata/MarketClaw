@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 // Create mock objects
 const mockTelegram = {
   sendMessage: vi.fn().mockResolvedValue({}),
+  sendDocument: vi.fn().mockResolvedValue({}),
   getMe: vi.fn().mockResolvedValue({ id: 12345, username: 'test_bot' }),
 };
 
@@ -380,6 +381,129 @@ describe('TelegramChannel', () => {
         'No buttons here',
         expect.not.objectContaining({ reply_markup: expect.anything() })
       );
+    });
+
+    it('should send file attachments after text message', async () => {
+      const attachment = {
+        buffer: Buffer.from('test pdf content'),
+        filename: 'report.pdf',
+        mimeType: 'application/pdf',
+        caption: 'Your report',
+      };
+
+      await channel.send('123456', {
+        text: 'Here is your report:',
+        attachments: [attachment],
+      });
+
+      const mockTelegram = getMockTelegram();
+      
+      // Text message should be sent first
+      expect(mockTelegram.sendMessage).toHaveBeenCalledWith(
+        123456,
+        'Here is your report:',
+        expect.any(Object)
+      );
+
+      // Then attachment should be sent
+      expect(mockTelegram.sendDocument).toHaveBeenCalledWith(
+        123456,
+        {
+          source: attachment.buffer,
+          filename: 'report.pdf',
+        },
+        {
+          caption: 'Your report',
+          reply_parameters: undefined,
+        }
+      );
+    });
+
+    it('should send multiple attachments', async () => {
+      const attachments = [
+        {
+          buffer: Buffer.from('pdf content'),
+          filename: 'report.pdf',
+          mimeType: 'application/pdf',
+        },
+        {
+          buffer: Buffer.from('pptx content'),
+          filename: 'presentation.pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        },
+      ];
+
+      await channel.send('123456', {
+        text: 'Your files:',
+        attachments,
+      });
+
+      const mockTelegram = getMockTelegram();
+      expect(mockTelegram.sendDocument).toHaveBeenCalledTimes(2);
+    });
+
+    it('should include reply_parameters for attachments when replyToId is set', async () => {
+      const attachment = {
+        buffer: Buffer.from('content'),
+        filename: 'file.pdf',
+        mimeType: 'application/pdf',
+      };
+
+      await channel.send('123456', {
+        text: 'Reply with attachment',
+        replyToId: '999',
+        attachments: [attachment],
+      });
+
+      const mockTelegram = getMockTelegram();
+      expect(mockTelegram.sendDocument).toHaveBeenCalledWith(
+        123456,
+        expect.any(Object),
+        expect.objectContaining({
+          reply_parameters: { message_id: 999 },
+        })
+      );
+    });
+
+    it('should handle attachment send failure gracefully', async () => {
+      const mockTelegram = getMockTelegram();
+      mockTelegram.sendDocument.mockRejectedValueOnce(new Error('Upload failed'));
+
+      const attachment = {
+        buffer: Buffer.from('content'),
+        filename: 'file.pdf',
+        mimeType: 'application/pdf',
+      };
+
+      // Should not throw - error is logged but not propagated
+      await channel.send('123456', {
+        text: 'Message with failing attachment',
+        attachments: [attachment],
+      });
+
+      expect(mockTelegram.sendMessage).toHaveBeenCalled();
+      expect(mockTelegram.sendDocument).toHaveBeenCalled();
+    });
+
+    it('should not send documents when attachments array is empty', async () => {
+      await channel.send('123456', {
+        text: 'No attachments',
+        attachments: [],
+      });
+
+      const mockTelegram = getMockTelegram();
+      expect(mockTelegram.sendMessage).toHaveBeenCalled();
+      expect(mockTelegram.sendDocument).not.toHaveBeenCalled();
+    });
+
+    it('should not send documents when attachments is undefined', async () => {
+      await channel.send('123456', {
+        text: 'No attachments field',
+      });
+
+      const mockTelegram = getMockTelegram();
+      expect(mockTelegram.sendMessage).toHaveBeenCalled();
+      expect(mockTelegram.sendDocument).not.toHaveBeenCalled();
     });
   });
 

@@ -80,6 +80,7 @@ Use any AI provider:
 - **Brand identity** — Colors, voice, taglines, typography per product
 - **Image library** — Store, tag, and search product images
 - **Document reading** — Extract text from PDF, Word (.docx/.doc), and text files
+- **Document generation** — Create PDF reports and PowerPoint presentations
 - **Web search** — Search the web with Brave API, extract content from URLs
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
@@ -392,6 +393,7 @@ marketclaw config
 - [Providers](./docs/PROVIDERS.md) — Configure AI providers
 - [Brand Identity](./docs/BRAND.md) — Colors, voice, taglines, typography
 - [Image Library](./docs/IMAGE-LIBRARY.md) — Store & search product images
+- [File Attachments](./docs/FILE-ATTACHMENTS.md) — Generate PDF & PowerPoint files
 - [Web Search](./docs/WEB-SEARCH.md) — Search the web & extract content
 - [Sub-Agents](./docs/SUB-AGENTS.md) — Specialist agents & delegation
 - [Team](./docs/TEAM.md) — Multi-user roles & permissions
