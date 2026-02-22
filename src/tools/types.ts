@@ -43,6 +43,17 @@ export interface ToolCost {
   breakdown?: Record<string, number>;
 }
 
+/**
+ * Inline button for interactive responses
+ */
+export interface InlineButton {
+  /** Button display text */
+  text: string;
+  
+  /** Callback command when clicked */
+  callback: string;
+}
+
 export interface ToolResult {
   success: boolean;
   message: string;
@@ -50,6 +61,9 @@ export interface ToolResult {
   
   /** Cost incurred by this tool execution (if any) */
   cost?: ToolCost;
+  
+  /** Inline buttons for interactive UI (e.g., approve/reject) */
+  buttons?: InlineButton[];
 }
 
 /**

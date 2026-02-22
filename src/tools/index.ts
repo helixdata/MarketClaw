@@ -23,6 +23,7 @@ import { imageLibraryTools } from './image-library-tools.js';
 import { webTools } from './web-tools.js';
 import { campaignTools } from './campaign-tools.js';
 import { calendarTools } from './calendar-tools.js';
+import { productTools } from './product-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -76,6 +77,9 @@ export async function initializeTools(): Promise<void> {
   // Register Google Calendar tools
   toolRegistry.registerAll(calendarTools, { category: 'scheduling' });
   
+  // Register product CRUD tools
+  toolRegistry.registerAll(productTools, { category: 'utility' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -96,3 +100,4 @@ export { imageLibraryTools } from './image-library-tools.js';
 export { webTools } from './web-tools.js';
 export { campaignTools } from './campaign-tools.js';
 export { calendarTools } from './calendar-tools.js';
+export { productTools } from './product-tools.js';
