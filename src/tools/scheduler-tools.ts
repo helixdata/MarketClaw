@@ -5,6 +5,8 @@
 
 import { Tool, ToolResult } from './types.js';
 import { scheduler, Scheduler } from '../scheduler/index.js';
+import { loadConfig } from '../config/index.js';
+import { isAuthenticated as isCalendarAuthenticated, getCalendarClient } from '../auth/google-calendar.js';
 
 // ============ Schedule Post ============
 export const schedulePostTool: Tool = {
@@ -53,13 +55,105 @@ export const schedulePostTool: Tool = {
       },
     });
 
+    let calendarEventCreated = false;
+    let calendarEventId: string | undefined;
+
+    // Optionally create calendar event
+    try {
+      const config = await loadConfig();
+      const shouldCreateEvent = config?.calendar?.createEventsForScheduledPosts ?? false;
+      
+      if (shouldCreateEvent && await isCalendarAuthenticated()) {
+        const calendar = await getCalendarClient();
+        
+        // Parse the schedule to get approximate next run time
+        // For simple "at HH:MM" schedules, calculate next occurrence
+        const nextRunTime = calculateNextRunTime(params.when);
+        
+        if (nextRunTime) {
+          const event = await calendar.events.insert({
+            calendarId: config?.calendar?.calendarId || 'primary',
+            requestBody: {
+              summary: `📱 Scheduled: Post to ${params.channel}`,
+              description: params.content,
+              start: {
+                dateTime: nextRunTime.toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              },
+              end: {
+                dateTime: new Date(nextRunTime.getTime() + 15 * 60 * 1000).toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              },
+            },
+          });
+          calendarEventCreated = true;
+          calendarEventId = event.data.id ?? undefined;
+        }
+      }
+    } catch {
+      // Calendar event creation is optional, don't fail the whole operation
+    }
+
+    let message = `Scheduled post to ${params.channel}. Job ID: ${job.id}`;
+    if (calendarEventCreated) {
+      message += '\n📅 Calendar event created.';
+    }
+
     return {
       success: true,
-      message: `Scheduled post to ${params.channel}. Job ID: ${job.id}`,
-      data: { jobId: job.id, schedule: cronExpression },
+      message,
+      data: { jobId: job.id, schedule: cronExpression, calendarEventId },
     };
   },
 };
+
+/**
+ * Calculate approximate next run time from a schedule string
+ */
+function calculateNextRunTime(when: string): Date | null {
+  const lower = when.toLowerCase().trim();
+  const now = new Date();
+  
+  // "at HH:MM" pattern
+  const timeMatch = lower.match(/at (\d{1,2}):(\d{2})/);
+  if (timeMatch) {
+    const hours = parseInt(timeMatch[1], 10);
+    const minutes = parseInt(timeMatch[2], 10);
+    const next = new Date(now);
+    next.setHours(hours, minutes, 0, 0);
+    
+    // If time already passed today, schedule for tomorrow
+    if (next <= now) {
+      next.setDate(next.getDate() + 1);
+    }
+    return next;
+  }
+  
+  // "in X hours/minutes" pattern
+  const inMatch = lower.match(/in (\d+) (hour|minute|min)/);
+  if (inMatch) {
+    const amount = parseInt(inMatch[1], 10);
+    const unit = inMatch[2];
+    const ms = unit.startsWith('hour') ? amount * 60 * 60 * 1000 : amount * 60 * 1000;
+    return new Date(now.getTime() + ms);
+  }
+  
+  // "tomorrow" pattern
+  if (lower.includes('tomorrow')) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const timeInTomorrow = lower.match(/(\d{1,2}):(\d{2})/);
+    if (timeInTomorrow) {
+      tomorrow.setHours(parseInt(timeInTomorrow[1], 10), parseInt(timeInTomorrow[2], 10), 0, 0);
+    } else {
+      tomorrow.setHours(9, 0, 0, 0); // Default to 9am
+    }
+    return tomorrow;
+  }
+  
+  return null;
+}
 
 // ============ Schedule Reminder ============
 export const scheduleReminderTool: Tool = {

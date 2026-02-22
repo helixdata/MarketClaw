@@ -86,6 +86,7 @@ Use any AI provider:
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
 - **Images** — Generate with DALL-E, analyze with vision
 - **Leads** — Simple CRM
+- **Calendar** — Google Calendar integration for event management
 
 ### 💬 Chat-First
 
@@ -395,6 +396,7 @@ marketclaw config
 - [Image Library](./docs/IMAGE-LIBRARY.md) — Store & search product images
 - [File Attachments](./docs/FILE-ATTACHMENTS.md) — Generate PDF & PowerPoint files
 - [Web Search](./docs/WEB-SEARCH.md) — Search the web & extract content
+- [Calendar](./docs/CALENDAR.md) — Google Calendar integration
 - [Sub-Agents](./docs/SUB-AGENTS.md) — Specialist agents & delegation
 - [Team](./docs/TEAM.md) — Multi-user roles & permissions
 - [Approvals](./docs/APPROVALS.md) — Content approval workflow
@@ -426,7 +428,8 @@ marketclaw config
 - [x] Product image library
 - [x] Vision/image support
 - [x] Web search & research tools
-- [ ] Google Calendar integration
+- [x] Google Calendar integration
+- [ ] Calendar-campaign sync (auto-create events for scheduled posts)
 - [ ] Notion integration
 - [ ] Google Ads integration
 - [ ] Content templates

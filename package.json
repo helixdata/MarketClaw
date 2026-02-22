@@ -40,6 +40,7 @@
     "discord.js": "^14.25.1",
     "dotenv": "^16.4.0",
     "fs-extra": "^11.2.0",
+    "googleapis": "^171.4.0",
     "image-size": "^2.0.2",
     "mammoth": "^1.11.0",
     "node-cron": "^4.2.1",

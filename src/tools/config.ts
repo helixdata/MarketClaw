@@ -47,6 +47,11 @@ export interface ProductToolConfig {
     defaultStyle?: string;  // Default style for images
   };
   
+  // Google Calendar
+  calendar?: {
+    calendarId?: string;    // Calendar ID for this product
+  };
+  
   // Custom env vars for any tool
   env?: Record<string, string>;
 }

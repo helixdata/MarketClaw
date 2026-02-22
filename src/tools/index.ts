@@ -22,6 +22,7 @@ import { brandTools } from './brand-tools.js';
 import { imageLibraryTools } from './image-library-tools.js';
 import { webTools } from './web-tools.js';
 import { campaignTools } from './campaign-tools.js';
+import { calendarTools } from './calendar-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -72,6 +73,9 @@ export async function initializeTools(): Promise<void> {
   // Register campaign management tools
   toolRegistry.registerAll(campaignTools, { category: 'marketing' });
   
+  // Register Google Calendar tools
+  toolRegistry.registerAll(calendarTools, { category: 'scheduling' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -91,3 +95,4 @@ export { brandTools } from './brand-tools.js';
 export { imageLibraryTools } from './image-library-tools.js';
 export { webTools } from './web-tools.js';
 export { campaignTools } from './campaign-tools.js';
+export { calendarTools } from './calendar-tools.js';
