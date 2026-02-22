@@ -214,6 +214,17 @@ class ApprovalManager extends EventEmitter {
   }
 
   /**
+   * Get approvals that have been pending for too long
+   */
+  getStaleApprovals(hoursThreshold: number = 24): ApprovalRequest[] {
+    const threshold = Date.now() - (hoursThreshold * 60 * 60 * 1000);
+    return this.data.requests.filter(r => 
+      r.status === 'pending' && 
+      new Date(r.requestedAt).getTime() < threshold
+    );
+  }
+
+  /**
    * Clean up expired requests
    */
   async cleanupExpired(): Promise<number> {

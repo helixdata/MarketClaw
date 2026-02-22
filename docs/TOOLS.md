@@ -157,6 +157,19 @@ Calendar tools support product-specific calendars. See [CALENDAR.md](./CALENDAR.
 - "Create a calendar for ProofPing"
 - "Delete the team sync event"
 
+### 📦 Product Tools
+
+| Tool | Description |
+|------|-------------|
+| `create_product` | Create a new product to manage marketing for |
+| `delete_product` | Delete a product and all its associated data |
+| `update_product` | Update basic product information (name, description) |
+
+**Examples:**
+- "Create a product called ProofPing"
+- "Update ProofPing's tagline to 'Uptime monitoring that just works'"
+- "Delete the old_product product"
+
 ### ⚙️ Config Tools
 
 | Tool | Description |

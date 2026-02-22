@@ -24,6 +24,7 @@ vi.mock('./manager.js', () => ({
     approve: vi.fn(),
     reject: vi.fn(),
     getApprovers: vi.fn(),
+    getStaleApprovals: vi.fn(),
   },
 }));
 
@@ -44,6 +45,7 @@ import {
   getApprovalTool,
   listApproversTool,
   myPendingApprovalsTool,
+  checkStaleApprovalsTool,
 } from './tools.js';
 import { approvalManager } from './manager.js';
 
@@ -56,6 +58,7 @@ const mockApprovalManager = approvalManager as unknown as {
   approve: ReturnType<typeof vi.fn>;
   reject: ReturnType<typeof vi.fn>;
   getApprovers: ReturnType<typeof vi.fn>;
+  getStaleApprovals: ReturnType<typeof vi.fn>;
 };
 
 describe('Approval Tools', () => {
@@ -225,6 +228,36 @@ describe('Approval Tools', () => {
       expect(result.data.notifyMessage).toContain('Test User');
       expect(result.data.notifyMessage).toContain('approval_notify');
     });
+
+    it('should include inline buttons for quick actions', async () => {
+      const mockRequest = {
+        id: 'approval_buttons',
+        contentType: 'tweet',
+        content: 'Test content',
+        requestedBy: 'user_1',
+        requestedByName: 'Test User',
+        status: 'pending',
+        requestedAt: new Date().toISOString(),
+      };
+      mockApprovalManager.requestApproval.mockResolvedValue(mockRequest);
+      mockApprovalManager.getApprovers.mockReturnValue([]);
+
+      const result = await requestApprovalTool.execute({
+        contentType: 'tweet',
+        content: 'Test content',
+        requesterId: 'user_1',
+        requesterName: 'Test User',
+      });
+
+      expect(result.buttons).toBeDefined();
+      expect(result.buttons).toHaveLength(3);
+      expect(result.buttons![0].text).toBe('✅ Approve');
+      expect(result.buttons![0].callback).toBe('approve approval_buttons');
+      expect(result.buttons![1].text).toBe('❌ Reject');
+      expect(result.buttons![1].callback).toBe('reject approval_buttons');
+      expect(result.buttons![2].text).toBe('👀 Preview');
+      expect(result.buttons![2].callback).toBe('preview approval_buttons');
+    });
   });
 
   describe('list_pending_approvals', () => {
@@ -286,6 +319,59 @@ describe('Approval Tools', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('0 pending approval(s)');
       expect(result.data.pending).toEqual([]);
+    });
+
+    it('should include buttons for each pending item', async () => {
+      mockApprovalManager.listPending.mockReturnValue([
+        {
+          id: 'approval_with_buttons',
+          contentType: 'tweet',
+          content: 'Tweet content',
+          requestedByName: 'User 1',
+          requestedAt: new Date().toISOString(),
+        },
+      ]);
+
+      const result = await listPendingApprovalsTool.execute({});
+
+      expect(result.success).toBe(true);
+      expect(result.data.pending[0].buttons).toBeDefined();
+      expect(result.data.pending[0].buttons).toHaveLength(3);
+      expect(result.data.pending[0].buttons[0].text).toBe('✅ Approve');
+      expect(result.data.pending[0].buttons[0].callback).toBe('approve approval_with_buttons');
+    });
+
+    it('should include top-level buttons for first pending item', async () => {
+      mockApprovalManager.listPending.mockReturnValue([
+        {
+          id: 'first_approval',
+          contentType: 'tweet',
+          content: 'First content',
+          requestedByName: 'User 1',
+          requestedAt: new Date().toISOString(),
+        },
+        {
+          id: 'second_approval',
+          contentType: 'email',
+          content: 'Second content',
+          requestedByName: 'User 2',
+          requestedAt: new Date().toISOString(),
+        },
+      ]);
+
+      const result = await listPendingApprovalsTool.execute({});
+
+      expect(result.buttons).toBeDefined();
+      expect(result.buttons).toHaveLength(3);
+      expect(result.buttons![0].callback).toBe('approve first_approval');
+    });
+
+    it('should not include top-level buttons when no pending items', async () => {
+      mockApprovalManager.listPending.mockReturnValue([]);
+
+      const result = await listPendingApprovalsTool.execute({});
+
+      expect(result.buttons).toBeUndefined();
     });
   });
 
@@ -617,6 +703,140 @@ describe('Approval Tools', () => {
       const result = await myPendingApprovalsTool.execute({ requesterId: 'user_123' });
 
       expect(result.data.pending[0].preview.length).toBe(100);
+    });
+  });
+
+  describe('check_stale_approvals', () => {
+    it('should have correct metadata', () => {
+      expect(checkStaleApprovalsTool.name).toBe('check_stale_approvals');
+    });
+
+    it('should return empty when no stale approvals', async () => {
+      mockApprovalManager.getStaleApprovals.mockReturnValue([]);
+
+      const result = await checkStaleApprovalsTool.execute({});
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('No stale approvals');
+      expect(result.data.stale).toEqual([]);
+    });
+
+    it('should return stale approvals with default 24h threshold', async () => {
+      const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        {
+          id: 'stale_approval_123',
+          contentType: 'tweet',
+          content: 'This is stale content that has been waiting',
+          requestedByName: 'User 1',
+          productId: 'product_a',
+          requestedAt: staleDate,
+        },
+      ]);
+
+      const result = await checkStaleApprovalsTool.execute({});
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('1 approval(s) pending > 24h');
+      expect(result.data.stale).toHaveLength(1);
+      expect(result.data.stale[0].id).toBe('stale_approval_123');
+      expect(result.data.stale[0].hoursAgo).toBeGreaterThanOrEqual(48);
+      expect(mockApprovalManager.getStaleApprovals).toHaveBeenCalledWith(24);
+    });
+
+    it('should use custom hours threshold', async () => {
+      mockApprovalManager.getStaleApprovals.mockReturnValue([]);
+
+      await checkStaleApprovalsTool.execute({ hoursThreshold: 12 });
+
+      expect(mockApprovalManager.getStaleApprovals).toHaveBeenCalledWith(12);
+    });
+
+    it('should truncate long content in preview', async () => {
+      const longContent = 'x'.repeat(100);
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        {
+          id: 'long_stale',
+          contentType: 'email',
+          content: longContent,
+          requestedByName: 'User',
+          requestedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+        },
+      ]);
+
+      const result = await checkStaleApprovalsTool.execute({});
+
+      expect(result.data.stale[0].preview.length).toBe(53); // 50 chars + "..."
+    });
+
+    it('should include action buttons for stale approvals', async () => {
+      const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        {
+          id: 'stale_approval_abc123',
+          contentType: 'tweet',
+          content: 'Stale tweet',
+          requestedByName: 'User',
+          requestedAt: staleDate,
+        },
+      ]);
+
+      const result = await checkStaleApprovalsTool.execute({});
+
+      expect(result.buttons).toBeDefined();
+      expect(result.buttons).toHaveLength(2);
+      expect(result.buttons![0].text).toBe('✅ abc123');
+      expect(result.buttons![0].callback).toBe('approve stale_approval_abc123');
+      expect(result.buttons![1].text).toBe('❌ abc123');
+      expect(result.buttons![1].callback).toBe('reject stale_approval_abc123');
+    });
+
+    it('should limit buttons to first 3 stale approvals', async () => {
+      const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        { id: 'stale_1', contentType: 'tweet', content: '1', requestedByName: 'U', requestedAt: staleDate },
+        { id: 'stale_2', contentType: 'tweet', content: '2', requestedByName: 'U', requestedAt: staleDate },
+        { id: 'stale_3', contentType: 'tweet', content: '3', requestedByName: 'U', requestedAt: staleDate },
+        { id: 'stale_4', contentType: 'tweet', content: '4', requestedByName: 'U', requestedAt: staleDate },
+      ]);
+
+      const result = await checkStaleApprovalsTool.execute({});
+
+      // 3 approvals * 2 buttons each = 6 buttons
+      expect(result.buttons).toHaveLength(6);
+      // Should not include stale_4
+      expect(result.buttons!.some(b => b.callback.includes('stale_4'))).toBe(false);
+    });
+
+    it('should include reminder info when sendReminders is true', async () => {
+      const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        { id: 'stale_1', contentType: 'tweet', content: '1', requestedByName: 'U', requestedAt: staleDate },
+      ]);
+      mockApprovalManager.getApprovers.mockReturnValue([
+        { id: 'admin_1', name: 'Admin' },
+        { id: 'manager_1', name: 'Manager' },
+      ]);
+
+      const result = await checkStaleApprovalsTool.execute({ sendReminders: true });
+
+      expect(result.message).toContain('Reminders will be sent to');
+      expect(result.message).toContain('Admin');
+      expect(result.message).toContain('Manager');
+      expect(result.data.sendReminders).toBe(true);
+      expect(result.data.approversToNotify).toHaveLength(2);
+    });
+
+    it('should handle no approvers when sendReminders is true', async () => {
+      const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      mockApprovalManager.getStaleApprovals.mockReturnValue([
+        { id: 'stale_1', contentType: 'tweet', content: '1', requestedByName: 'U', requestedAt: staleDate },
+      ]);
+      mockApprovalManager.getApprovers.mockReturnValue([]);
+
+      const result = await checkStaleApprovalsTool.execute({ sendReminders: true });
+
+      expect(result.message).toContain('No approvers configured to notify');
     });
   });
 });

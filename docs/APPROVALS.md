@@ -102,6 +102,27 @@ See who can approve content (optionally for a specific product).
 ### `my_pending_approvals`
 List your own pending submissions.
 
+### `check_stale_approvals`
+Check for approvals pending longer than a threshold (useful for heartbeats/cron).
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `hoursThreshold` | No | Hours before considered stale (default: 24) |
+| `sendReminders` | No | Whether to notify approvers about stale items |
+
+```
+You: Check for stale approvals
+
+Bot: ⚠️ 2 approval(s) pending > 24h
+     • approval_abc (tweet) - 48h ago
+     • approval_xyz (email) - 36h ago
+```
+
+This tool is useful for:
+- Heartbeat checks to proactively remind about pending approvals
+- Scheduled cron jobs to send daily reminders
+- Manual checks when things seem stuck
+
 ## Approval Notifications
 
 When content is submitted for approval, team members with `approve_content` permission are notified via DM:
@@ -117,6 +138,28 @@ Content:
 "We just shipped the biggest update yet. Here's what's new..."
 
 Reply with "approve approval_123" or "reject approval_123 [reason]"
+```
+
+## Inline Buttons
+
+On supported channels (Telegram, Discord, etc.), approval responses include inline buttons for quick actions:
+
+| Button | Action |
+|--------|--------|
+| ✅ Approve | Immediately approve the content |
+| ❌ Reject | Reject the content (prompts for reason) |
+| 👀 Preview | Show full content preview |
+
+These buttons appear:
+- When requesting approval (`request_approval`)
+- When listing pending approvals (`list_pending_approvals`)
+
+This makes the approval workflow faster — no need to type commands. Just click!
+
+```
+📝 Approval requested!
+
+[✅ Approve] [❌ Reject] [👀 Preview]
 ```
 
 ## Approval Data

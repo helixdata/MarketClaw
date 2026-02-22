@@ -80,6 +80,11 @@ export const requestApprovalTool: Tool = {
           `**Content:**\n${params.content.slice(0, 500)}${params.content.length > 500 ? '...' : ''}\n\n` +
           `Reply with "approve ${request.id}" or "reject ${request.id} [reason]"`,
       },
+      buttons: [
+        { text: '✅ Approve', callback: `approve ${request.id}` },
+        { text: '❌ Reject', callback: `reject ${request.id}` },
+        { text: '👀 Preview', callback: `preview ${request.id}` },
+      ],
     };
   },
 };
@@ -108,12 +113,27 @@ export const listPendingApprovalsTool: Tool = {
       requestedBy: r.requestedByName,
       requestedAt: r.requestedAt,
       productId: r.productId,
+      buttons: [
+        { text: '✅ Approve', callback: `approve ${r.id}` },
+        { text: '❌ Reject', callback: `reject ${r.id}` },
+        { text: '👀 Preview', callback: `preview ${r.id}` },
+      ],
     }));
+
+    // Return buttons for the first pending item (for quick action)
+    const buttons = pending.length > 0
+      ? [
+          { text: '✅ Approve', callback: `approve ${pending[0].id}` },
+          { text: '❌ Reject', callback: `reject ${pending[0].id}` },
+          { text: '👀 Preview', callback: `preview ${pending[0].id}` },
+        ]
+      : undefined;
 
     return {
       success: true,
       message: `${list.length} pending approval(s)`,
       data: { pending: list },
+      buttons,
     };
   },
 };
@@ -319,6 +339,78 @@ export const myPendingApprovalsTool: Tool = {
   },
 };
 
+// ============ Check Stale Approvals ============
+export const checkStaleApprovalsTool: Tool = {
+  name: 'check_stale_approvals',
+  description: 'Check for approvals pending longer than threshold and optionally send reminders',
+  parameters: {
+    type: 'object',
+    properties: {
+      hoursThreshold: {
+        type: 'number',
+        description: 'Hours before considered stale (default: 24)',
+      },
+      sendReminders: {
+        type: 'boolean',
+        description: 'Whether to notify approvers about stale items',
+      },
+    },
+  },
+
+  async execute(params): Promise<ToolResult> {
+    const hours = params?.hoursThreshold || 24;
+    const stale = approvalManager.getStaleApprovals(hours);
+
+    if (stale.length === 0) {
+      return {
+        success: true,
+        message: 'No stale approvals',
+        data: { stale: [] },
+      };
+    }
+
+    const now = Date.now();
+    const staleList = stale.map(a => {
+      const hoursAgo = Math.round((now - new Date(a.requestedAt).getTime()) / (60 * 60 * 1000));
+      return {
+        id: a.id,
+        type: a.contentType,
+        preview: a.content.slice(0, 50) + (a.content.length > 50 ? '...' : ''),
+        requestedBy: a.requestedByName,
+        productId: a.productId,
+        hoursAgo,
+      };
+    });
+
+    // Generate buttons for the first 3 stale approvals (to avoid too many buttons)
+    const buttons = stale.slice(0, 3).flatMap(a => [
+      { text: `✅ ${a.id.slice(-6)}`, callback: `approve ${a.id}` },
+      { text: `❌ ${a.id.slice(-6)}`, callback: `reject ${a.id}` },
+    ]);
+
+    // If sendReminders is requested, include reminder info in response
+    let reminderInfo: string | undefined;
+    if (params?.sendReminders) {
+      const approvers = approvalManager.getApprovers();
+      const approverNames = approvers.map(a => a.name).join(', ');
+      reminderInfo = approvers.length > 0
+        ? `Reminders will be sent to: ${approverNames}`
+        : 'No approvers configured to notify';
+    }
+
+    return {
+      success: true,
+      message: `⚠️ ${stale.length} approval(s) pending > ${hours}h${reminderInfo ? `. ${reminderInfo}` : ''}`,
+      data: {
+        stale: staleList,
+        sendReminders: params?.sendReminders || false,
+        approversToNotify: params?.sendReminders ? approvalManager.getApprovers() : undefined,
+      },
+      buttons,
+    };
+  },
+};
+
 // ============ Export All ============
 export const approvalTools: Tool[] = [
   requestApprovalTool,
@@ -328,4 +420,5 @@ export const approvalTools: Tool[] = [
   getApprovalTool,
   listApproversTool,
   myPendingApprovalsTool,
+  checkStaleApprovalsTool,
 ];

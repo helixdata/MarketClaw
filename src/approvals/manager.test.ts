@@ -508,6 +508,95 @@ describe('ApprovalManager', () => {
     });
   });
 
+  describe('getStaleApprovals', () => {
+    it('should return approvals pending longer than threshold', async () => {
+      const request = await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Old pending approval',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+
+      // Manually set requestedAt to 48 hours ago
+      request.requestedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+      const stale = approvalManager.getStaleApprovals(24);
+      expect(stale).toHaveLength(1);
+      expect(stale[0].id).toBe(request.id);
+    });
+
+    it('should use default 24h threshold', async () => {
+      const request = await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Stale approval',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+
+      // 25 hours ago
+      request.requestedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+
+      const stale = approvalManager.getStaleApprovals();
+      expect(stale).toHaveLength(1);
+    });
+
+    it('should not return recent approvals', async () => {
+      await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Recent approval',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+
+      const stale = approvalManager.getStaleApprovals(24);
+      expect(stale).toHaveLength(0);
+    });
+
+    it('should not return approved/rejected approvals', async () => {
+      const approved = await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Will be approved',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+      const rejected = await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Will be rejected',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+
+      // Set old timestamps
+      approved.requestedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      rejected.requestedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+      // Resolve them
+      await approvalManager.approve(approved.id, 'admin', 'Admin');
+      await approvalManager.reject(rejected.id, 'admin', 'Admin', 'reason');
+
+      const stale = approvalManager.getStaleApprovals(24);
+      expect(stale).toHaveLength(0);
+    });
+
+    it('should respect custom threshold', async () => {
+      const request = await approvalManager.requestApproval({
+        contentType: 'tweet',
+        content: 'Slightly old',
+        requestedBy: 'user_123',
+        requestedByName: 'Test User',
+      });
+
+      // 5 hours ago
+      request.requestedAt = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
+
+      // Not stale at 24h threshold
+      expect(approvalManager.getStaleApprovals(24)).toHaveLength(0);
+
+      // Stale at 4h threshold
+      expect(approvalManager.getStaleApprovals(4)).toHaveLength(1);
+    });
+  });
+
   describe('cleanupExpired', () => {
     it('should mark expired approvals as expired status', async () => {
       const request = await approvalManager.requestApproval({
