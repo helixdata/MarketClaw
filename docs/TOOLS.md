@@ -137,6 +137,24 @@ User: "Draft a tweet for ProofPing"
 | `update_lead` | Update lead status |
 | `add_lead_note` | Add note to lead |
 
+### 📆 Calendar Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_calendar_events` | List upcoming Google Calendar events |
+| `create_calendar_event` | Create a new calendar event |
+| `update_calendar_event` | Update an existing event |
+| `delete_calendar_event` | Delete an event |
+| `list_calendars` | List available calendars |
+| `google_calendar_auth` | Authenticate with Google Calendar |
+
+Calendar tools support product-specific calendars. See [CALENDAR.md](./CALENDAR.md) for full setup and configuration.
+
+**Examples:**
+- "What's on my calendar tomorrow?"
+- "Schedule a launch meeting for Monday 2pm"
+- "Delete the team sync event"
+
 ### ⚙️ Config Tools
 
 | Tool | Description |

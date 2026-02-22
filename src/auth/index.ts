@@ -243,3 +243,6 @@ export async function setActiveProfile(provider: string, profileName: string): P
   store.activeProfiles[provider] = profileName;
   await saveAuthStore(store);
 }
+
+// Re-export Google Calendar auth
+export * from './google-calendar.js';

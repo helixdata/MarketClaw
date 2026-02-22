@@ -109,6 +109,13 @@ const ConfigSchema = z.object({
       maxIterations: z.number().optional(),
     })).optional(),
   }).optional(),
+
+  // Google Calendar
+  calendar: z.object({
+    provider: z.enum(['google']).default('google'),
+    calendarId: z.string().default('primary'),
+    createEventsForScheduledPosts: z.boolean().default(true),
+  }).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
