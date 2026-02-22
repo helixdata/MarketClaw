@@ -103,7 +103,7 @@ export class ProductKnowledge {
   /**
    * Chunk text into smaller pieces for embedding
    */
-  private chunkText(text: string, metadata: { file: string }): { content: string; section?: string }[] {
+  private chunkText(text: string, _metadata: { file: string }): { content: string; section?: string }[] {
     const chunks: { content: string; section?: string }[] = [];
     
     // Try to split by headers first

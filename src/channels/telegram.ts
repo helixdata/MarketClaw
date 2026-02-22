@@ -140,7 +140,7 @@ export class TelegramChannel implements Channel {
 
     try {
       const testBot = new Telegraf(token);
-      const me = await testBot.telegram.getMe();
+      await testBot.telegram.getMe();
       return { valid: true };
     } catch (err: any) {
       return { valid: false, error: `Invalid token: ${err.message}` };

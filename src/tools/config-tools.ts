@@ -7,9 +7,7 @@ import { Tool, ToolResult } from './types.js';
 import { 
   getProductToolConfig, 
   saveProductToolConfig, 
-  getGlobalToolConfig,
-  saveGlobalToolConfig,
-  ProductToolConfig 
+  getGlobalToolConfig
 } from './config.js';
 import { memory } from '../memory/index.js';
 

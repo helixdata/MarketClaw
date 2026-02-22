@@ -4,7 +4,7 @@
  */
 
 import { Tool, ToolResult } from './types.js';
-import { getResendConfig, getGlobalToolConfig } from './config.js';
+import { getResendConfig } from './config.js';
 
 // Resend API
 const RESEND_API = 'https://api.resend.com';

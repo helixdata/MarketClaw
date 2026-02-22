@@ -38,7 +38,8 @@ async function getLinkedInToken(): Promise<string | null> {
 // LinkedIn user URN (from TOOLS.md)
 const USER_URN = 'urn:li:person:vuzryA4D9-';
 
-interface LinkedInPost {
+// Reserved for future typed post creation
+interface _LinkedInPost {
   text: string;
   linkUrl?: string;
   linkTitle?: string;

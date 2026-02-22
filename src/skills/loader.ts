@@ -7,8 +7,7 @@ import { readFile, readdir, stat, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
-import { Skill, SkillManifest, SkillInstallResult } from './types.js';
-import { Tool } from '../tools/types.js';
+import { Skill, SkillManifest } from './types.js';
 import { toolRegistry } from '../tools/registry.js';
 
 const SKILLS_DIR = path.join(homedir(), '.marketclaw', 'skills');

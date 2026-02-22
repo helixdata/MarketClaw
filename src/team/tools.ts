@@ -5,7 +5,6 @@
 
 import { Tool, ToolResult } from '../tools/types.js';
 import { teamManager } from './manager.js';
-import { BUILTIN_ROLES } from './types.js';
 
 // ============ List Team ============
 export const listTeamTool: Tool = {

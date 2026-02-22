@@ -127,7 +127,7 @@ export class Scheduler extends EventEmitter {
   /**
    * Calculate next run time from cron expression
    */
-  private getNextRun(cronExpression: string): number {
+  private getNextRun(_cronExpression: string): number {
     // Simple approximation - in production you'd use cron-parser
     return Date.now() + 60000; // 1 minute placeholder
   }

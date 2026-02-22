@@ -7,7 +7,7 @@ import { createInterface } from 'readline';
 import chalk from 'chalk';
 import { loadConfig, saveConfig, Config } from './config/index.js';
 import { storeApiKey, storeSetupToken } from './auth/index.js';
-import { providers, PROVIDER_INFO, ProviderInfo } from './providers/index.js';
+import { providers, PROVIDER_INFO } from './providers/index.js';
 
 const rl = createInterface({
   input: process.stdin,

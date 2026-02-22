@@ -71,10 +71,10 @@ export async function generatePdf(options: PdfOptions): Promise<Buffer> {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      // Track page count for page numbers
-      let pageCount = 1;
+      // Track page count for page numbers (reserved for future use)
+      let _pageCount = 1;
       doc.on('pageAdded', () => {
-        pageCount++;
+        _pageCount++;
       });
 
       // Add title if provided

@@ -9,7 +9,7 @@ import path from 'path';
 import { homedir } from 'os';
 import { subAgentRegistry } from './registry.js';
 import { builtinSpecialists } from './specialists.js';
-import { SubAgentManifest, SubAgentConfig, AgentIdentity } from './types.js';
+import { SubAgentManifest, AgentIdentity } from './types.js';
 import pino from 'pino';
 
 const logger = pino({ name: 'agent-loader' });

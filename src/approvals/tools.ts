@@ -5,7 +5,6 @@
 
 import { Tool, ToolResult } from '../tools/types.js';
 import { approvalManager } from './manager.js';
-import { teamManager } from '../team/index.js';
 import { ContentType } from './types.js';
 
 // ============ Request Approval ============

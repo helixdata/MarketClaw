@@ -5,7 +5,7 @@
 
 import { Tool, ToolResult } from '../tools/types.js';
 import { costTracker } from './tracker.js';
-import { CostQuery, Budget } from './types.js';
+import { CostQuery } from './types.js';
 
 // ============ Get Costs ============
 export const getCostsTool: Tool = {
