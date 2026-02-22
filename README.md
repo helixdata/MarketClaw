@@ -81,7 +81,7 @@ Use any AI provider:
 - **Image library** — Store, tag, and search product images
 - **Document reading** — Extract text from PDF, Word (.docx/.doc), and text files
 - **Document generation** — Create PDF reports and PowerPoint presentations
-- **Web search** — Search the web with Brave API, extract content from URLs
+- **Web search & research** — Search the web, extract content, compile research reports
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
 - **Images** — Generate with DALL-E, analyze with vision
