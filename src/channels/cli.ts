@@ -4,6 +4,10 @@
  */
 
 import * as readline from 'readline';
+import { writeFile, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
 import { Channel, ChannelConfig, ChannelMessage, ChannelResponse } from './types.js';
 import { channelRegistry } from './registry.js';
 import pino from 'pino';
@@ -98,6 +102,25 @@ export class CLIChannel implements Channel {
 
   async send(userId: string, response: ChannelResponse): Promise<void> {
     console.log(`\n${response.text}\n`);
+
+    // Save any attachments to temp directory
+    if (response.attachments && response.attachments.length > 0) {
+      const outputDir = path.join(tmpdir(), 'marketclaw-attachments');
+      
+      if (!existsSync(outputDir)) {
+        await mkdir(outputDir, { recursive: true });
+      }
+
+      for (const attachment of response.attachments) {
+        const outputPath = path.join(outputDir, `${Date.now()}-${attachment.filename}`);
+        await writeFile(outputPath, attachment.buffer);
+        console.log(`📎 Attachment saved: ${outputPath}`);
+        if (attachment.caption) {
+          console.log(`   ${attachment.caption}`);
+        }
+      }
+      console.log('');
+    }
   }
 
   isConfigured(): boolean {

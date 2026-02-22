@@ -1269,7 +1269,7 @@ describe('DiscordChannel', () => {
       const handlers = getClientHandlers();
       await handlers[Events.MessageCreate](mockMessage);
 
-      expect(mockMessage.reply).toHaveBeenCalledWith('Hello back!');
+      expect(mockMessage.reply).toHaveBeenCalledWith({ content: 'Hello back!' });
     });
 
     it('should truncate long responses to 2000 chars', async () => {
@@ -1282,7 +1282,35 @@ describe('DiscordChannel', () => {
       const handlers = getClientHandlers();
       await handlers[Events.MessageCreate](mockMessage);
 
-      expect(mockMessage.reply).toHaveBeenCalledWith('A'.repeat(1900) + '...');
+      expect(mockMessage.reply).toHaveBeenCalledWith({ content: 'A'.repeat(1900) + '...' });
+    });
+
+    it('should include file attachments in reply', async () => {
+      mockMessage.content = `<@${mockBotUser.id}> generate a report`;
+
+      const attachment = {
+        buffer: Buffer.from('pdf content'),
+        filename: 'report.pdf',
+        mimeType: 'application/pdf',
+        caption: 'Your report',
+      };
+      const mockHandler = vi.fn().mockResolvedValue({ 
+        text: 'Here is your report:', 
+        attachments: [attachment],
+      });
+      vi.mocked(channelRegistry.getMessageHandler).mockReturnValue(mockHandler);
+
+      const handlers = getClientHandlers();
+      await handlers[Events.MessageCreate](mockMessage);
+
+      expect(mockMessage.reply).toHaveBeenCalledWith({
+        content: 'Here is your report:',
+        files: [{
+          attachment: attachment.buffer,
+          name: 'report.pdf',
+          description: 'Your report',
+        }],
+      });
     });
 
     it('should send typing indicator', async () => {

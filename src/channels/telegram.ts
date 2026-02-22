@@ -102,6 +102,30 @@ export class TelegramChannel implements Channel {
         throw err;
       }
     }
+
+    // Send any file attachments
+    if (response.attachments && response.attachments.length > 0) {
+      for (const attachment of response.attachments) {
+        try {
+          await this.bot.telegram.sendDocument(
+            numericUserId,
+            {
+              source: attachment.buffer,
+              filename: attachment.filename,
+            },
+            {
+              caption: attachment.caption,
+              reply_parameters: response.replyToId 
+                ? { message_id: parseInt(response.replyToId, 10) } 
+                : undefined,
+            }
+          );
+          logger.info({ filename: attachment.filename, userId }, 'Sent attachment');
+        } catch (err) {
+          logger.error({ err, filename: attachment.filename, userId }, 'Failed to send attachment');
+        }
+      }
+    }
   }
 
   isConfigured(): boolean {

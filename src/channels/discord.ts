@@ -351,7 +351,18 @@ export class DiscordChannel implements Channel {
             ? response.text.slice(0, 1900) + '...'
             : response.text;
           
-          await msg.reply(text);
+          // Build reply options with optional attachments
+          const replyOptions: any = { content: text };
+          
+          if (response.attachments && response.attachments.length > 0) {
+            replyOptions.files = response.attachments.map(attachment => ({
+              attachment: attachment.buffer,
+              name: attachment.filename,
+              description: attachment.caption,
+            }));
+          }
+          
+          await msg.reply(replyOptions);
         }
       } catch (error) {
         logger.error({ error, userId: message.userId }, 'Error processing Discord message');

@@ -9,6 +9,23 @@ export interface ChannelConfig {
 }
 
 /**
+ * File attachment to send with a response
+ */
+export interface ChannelAttachment {
+  /** File data as Buffer */
+  buffer: Buffer;
+  
+  /** Filename for the attachment */
+  filename: string;
+  
+  /** MIME type (application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation, etc.) */
+  mimeType: string;
+  
+  /** Optional caption/description for the attachment */
+  caption?: string;
+}
+
+/**
  * Image attachment from a channel
  */
 export interface ChannelImage {
@@ -78,6 +95,9 @@ export interface ChannelResponse {
   replyToId?: string;
   buttons?: Array<{ text: string; callback: string }>;
   metadata?: Record<string, unknown>;
+  
+  /** File attachments to send with the response */
+  attachments?: ChannelAttachment[];
 }
 
 /**
