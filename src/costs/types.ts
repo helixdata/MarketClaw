@@ -45,6 +45,9 @@ export interface CostRecord {
   /** Product context (if any) */
   productId?: string;
   
+  /** Campaign context (if any) */
+  campaignId?: string;
+  
   /** User who triggered the action */
   userId?: string;
   
@@ -69,6 +72,7 @@ export interface CostSummary {
   byTool?: Record<string, number>;
   byAgent?: Record<string, number>;
   byProduct?: Record<string, number>;
+  byCampaign?: Record<string, number>;
   byProvider?: Record<string, number>;
   byUser?: Record<string, number>;
   
@@ -140,6 +144,9 @@ export interface CostQuery {
   
   /** Filter by product */
   productId?: string;
+  
+  /** Filter by campaign */
+  campaignId?: string;
   
   /** Filter by user */
   userId?: string;

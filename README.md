@@ -24,9 +24,11 @@ Build in public, automate your marketing, never forget your campaigns.
 
 MarketClaw is an AI marketing assistant that:
 
-- 🤖 **Lives in Telegram** — Chat naturally about your marketing
+- 💬 **Lives in your chat** — Telegram, Discord, Slack, or build your own channel
 - 🧠 **Remembers everything** — Products, campaigns, brand voice
 - 📝 **Creates content** — Tweets, LinkedIn posts, Product Hunt launches
+- 📊 **Manages campaigns** — Organize posts, track metrics, measure ROI
+- 💰 **Tracks costs** — Know exactly what you're spending per campaign
 - ⏰ **Schedules posts** — Set it and forget it
 - 🔌 **Pluggable** — Swap AI providers, add skills, customize tools
 
