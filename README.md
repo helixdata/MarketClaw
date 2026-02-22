@@ -31,7 +31,7 @@ MarketClaw is an AI marketing assistant that:
 - 💰 **Tracks costs** — Know exactly what you're spending per campaign
 - ⏰ **Schedules posts** — Set it and forget it
 - 🤖 **Automates tasks** — "Check inbox every hour and respond to leads"
-- 🔌 **Pluggable** — Swap AI providers, add skills, customize tools
+- 🔌 **Pluggable** — Swap AI providers, add skills, [build your own](./docs/SKILLS.md)
 
 Think of it as your marketing co-pilot that's always on, always learning, and never forgets a campaign.
 
@@ -54,7 +54,7 @@ npx tsx src/cli.ts setup
 npx tsx src/cli.ts start
 ```
 
-That's it. Open Telegram and start chatting with your bot.
+That's it. Open your configured channel (Telegram, Discord, or Slack) and start chatting.
 
 ---
 
@@ -81,15 +81,15 @@ Use any AI provider:
 - **Image library** — Store, tag, and search product images
 - **Document reading** — Extract text from PDF, Word (.docx/.doc), and text files
 - **Document generation** — Create PDF reports and PowerPoint presentations
-- **Web search** — Search the web with Brave API, extract content from URLs
+- **Web search & research** — Search the web, extract content, compile research reports
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
 - **Images** — Generate with DALL-E, analyze with vision
 - **Leads** — Simple CRM
 
-### 📱 Telegram-First
+### 💬 Chat-First
 
-Your primary interface. Natural conversation, inline buttons, image sharing.
+Works where you already are — Telegram, Discord, Slack, or CLI. Natural conversation, inline buttons, image sharing.
 
 ```
 You: "Schedule a tweet about our new feature for tomorrow 9am"

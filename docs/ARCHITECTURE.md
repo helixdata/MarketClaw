@@ -56,9 +56,9 @@ interface Channel {
 ```
 
 **Supported channels:**
-- **Telegram** — Primary interface, supports buttons and rich media
-- **Discord** — Server/guild support with slash commands
-- **Slack** — Workspace integration via Bolt
+- **Telegram** — Bot API with inline buttons and rich media
+- **Discord** — Server/guild support with mentions and attachments
+- **Slack** — Workspace integration via Bolt (socket mode)
 - **CLI** — Local development and testing
 
 ### 2. Providers (`src/providers/`)
