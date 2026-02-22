@@ -120,6 +120,18 @@ Add a new member (admin only).
 | `defaultRole` | No | Default role (admin/manager/creator/viewer) |
 | `productRoles` | No | Product-specific roles as JSON |
 
+### `update_team_member`
+Update an existing member's details (admin only).
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `memberId` or `telegramId` | Yes | Member identifier |
+| `name` | No | New name |
+| `email` | No | New email address |
+| `newTelegramId` | No | New Telegram ID |
+| `newDiscordId` | No | New Discord ID |
+| `newSlackId` | No | New Slack ID |
+
 ### `remove_team_member`
 Remove a member from the team.
 
@@ -203,6 +215,44 @@ Bot: ❌ You don't have permission to create content for LaunchCrew
 
 Jane (manager for ProofPing): Create a tweet for ProofPing
 Bot: Here's a draft: "..."
+```
+
+## Member Preferences
+
+Each team member can have personal preferences stored:
+
+| Preference | Description |
+|------------|-------------|
+| `voice` | Communication style (professional/casual/friendly/playful) |
+| `defaultProduct` | Default product context for this member |
+| `activeCampaign` | Active campaign for this member |
+| `timezone` | Member's timezone |
+| `notifyOn` | Events to notify about |
+
+### Per-Member Active Campaign
+
+Active campaign is stored **per team member**, not globally. This means:
+
+- Each member can work on different campaigns simultaneously
+- Setting active campaign only affects your own context
+- Falls back to global setting if no member preference set
+
+```
+Jane: Set active campaign to product-launch
+Bot: ✅ Active campaign set to "Product Launch" for Jane
+
+Brett: What's my active campaign?
+Bot: Your active campaign is "Q1 Marketing" (Brett's context)
+```
+
+### Update Preferences
+
+```
+You: Set my voice to casual
+Bot: ✅ Updated your preference: voice → casual
+
+You: Set my timezone to America/New_York
+Bot: ✅ Updated your preference: timezone → America/New_York
 ```
 
 ## Custom Roles
