@@ -72,11 +72,17 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
       }
     }
     
-    // Add text content
+    // Add text content with local paths so AI knows where images are saved
+    const imagePaths = message.images
+      .filter(img => img.path)
+      .map(img => img.path)
+      .join(', ');
+    const pathInfo = imagePaths ? `\n\n[Images saved locally at: ${imagePaths}]` : '';
+    
     if (message.text && message.text !== '[Image attached]') {
-      contentParts.push({ type: 'text', text: message.text });
+      contentParts.push({ type: 'text', text: message.text + pathInfo });
     } else {
-      contentParts.push({ type: 'text', text: 'What do you see in this image?' });
+      contentParts.push({ type: 'text', text: 'What do you see in this image?' + pathInfo });
     }
     
     messageContent = contentParts;
@@ -129,10 +135,16 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
     }
   }
   
+  // Build caller context (so AI knows who's calling for permission-gated tools)
+  const callerContext = `# Current Caller
+- Channel: ${channel.name}
+- User ID: ${message.userId}
+${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for callerTelegramId in admin tools)` : ''}`;
+
   // Build full system prompt
   const fullSystemPrompt = knowledgeContext 
-    ? `${systemPrompt}\n\n# Memory Context\n${memoryContext}\n\n# Product Knowledge\n${knowledgeContext}`
-    : `${systemPrompt}\n\n# Memory Context\n${memoryContext}`;
+    ? `${systemPrompt}\n\n${callerContext}\n\n# Memory Context\n${memoryContext}\n\n# Product Knowledge\n${knowledgeContext}`
+    : `${systemPrompt}\n\n${callerContext}\n\n# Memory Context\n${memoryContext}`;
 
   // Get active provider
   const provider = providers.getActive();
