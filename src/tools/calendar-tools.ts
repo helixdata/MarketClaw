@@ -354,8 +354,8 @@ export const updateCalendarEventTool: Tool = {
       const calendar = await getCalendarClient();
       const calendarId = params.calendarId || await resolveCalendarId(params.productId);
       
-      // First, get the existing event
-      const existing = await calendar.events.get({
+      // Validate event exists (will throw if not found)
+      await calendar.events.get({
         calendarId,
         eventId: params.eventId,
       });
