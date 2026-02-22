@@ -233,6 +233,83 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
   return { text: finalResponse };
 }
 
+/**
+ * Execute an automated task (used by scheduler for 'task' type jobs)
+ * This invokes the AI with a task prompt and lets it use tools
+ */
+async function executeTask(taskPrompt: string, context?: { productId?: string; campaignId?: string }): Promise<string> {
+  const provider = providers.getActive();
+  if (!provider) {
+    return '⚠️ No AI provider available for task execution';
+  }
+
+  // Build context
+  const memoryContext = await memory.buildContext();
+  let contextInfo = '';
+  
+  if (context?.productId) {
+    const product = await memory.getProduct(context.productId);
+    if (product) {
+      contextInfo += `\n\nActive Product: ${product.name}`;
+    }
+  }
+  
+  if (context?.campaignId) {
+    const campaign = await memory.getCampaign(context.campaignId);
+    if (campaign) {
+      contextInfo += `\nActive Campaign: ${campaign.name}`;
+    }
+  }
+
+  const fullSystemPrompt = `${systemPrompt}\n\n# Memory Context\n${memoryContext}${contextInfo}\n\n# Task Mode\nYou are executing an automated task. Complete it using available tools, then summarize what you did.`;
+
+  // Start with task as user message
+  const history: Message[] = [
+    { role: 'user', content: `[Automated Task]\n\n${taskPrompt}` }
+  ];
+
+  // Get tool definitions
+  const tools = toolRegistry.getDefinitions();
+
+  // Tool loop
+  let finalResponse = '';
+  let iterations = 0;
+  const maxIterations = 10;
+
+  while (iterations < maxIterations) {
+    iterations++;
+
+    const response = await provider.complete({
+      messages: history,
+      systemPrompt: fullSystemPrompt,
+      tools: tools.length > 0 ? tools : undefined,
+    });
+
+    if (!response.toolCalls || response.toolCalls.length === 0) {
+      finalResponse = response.content;
+      break;
+    }
+
+    // Handle tool calls
+    history.push({
+      role: 'assistant',
+      content: response.content || '',
+      toolCalls: response.toolCalls,
+    });
+
+    for (const toolCall of response.toolCalls) {
+      const result = await toolRegistry.execute(toolCall.name, toolCall.arguments);
+      history.push({
+        role: 'tool',
+        content: JSON.stringify(result),
+        toolCallId: toolCall.id,
+      });
+    }
+  }
+
+  return finalResponse || 'Task completed (no response generated)';
+}
+
 export async function startAgent(): Promise<void> {
   logger.info('🦀 Starting MarketClaw...');
 
@@ -378,6 +455,48 @@ export async function startAgent(): Promise<void> {
           });
         } catch (err) {
           logger.error({ err, userId }, 'Failed to send post notification');
+        }
+      }
+    } else if (job.type === 'task' && job.payload.content) {
+      // Execute automated task with AI
+      logger.info({ jobId: job.id, task: job.payload.content.slice(0, 50) }, 'Executing automated task');
+      
+      try {
+        const result = await executeTask(job.payload.content, {
+          productId: job.payload.productId,
+          campaignId: job.payload.campaignId,
+        });
+        
+        // Notify user of task completion
+        const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+        const notify = job.payload.metadata?.notify !== false; // Default to notifying
+        
+        if (notify && result) {
+          for (const userId of adminUsers) {
+            try {
+              await notifyChannel.send(String(userId), {
+                text: `🤖 **Automated Task Completed**\n\n**Task:** ${job.name}\n\n**Result:**\n${result.slice(0, 1500)}${result.length > 1500 ? '...' : ''}`,
+              });
+            } catch (err) {
+              logger.error({ err, userId }, 'Failed to send task notification');
+            }
+          }
+        }
+        
+        logger.info({ jobId: job.id, resultLength: result.length }, 'Task completed');
+      } catch (err) {
+        logger.error({ err, jobId: job.id }, 'Task execution failed');
+        
+        // Notify user of failure
+        const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+        for (const userId of adminUsers) {
+          try {
+            await notifyChannel.send(String(userId), {
+              text: `⚠️ **Automated Task Failed**\n\n**Task:** ${job.name}\n**Error:** ${err}`,
+            });
+          } catch (notifyErr) {
+            logger.error({ err: notifyErr, userId }, 'Failed to send error notification');
+          }
         }
       }
     }

@@ -22,10 +22,40 @@ Each tool has:
 | Tool | Description |
 |------|-------------|
 | `schedule_post` | Schedule a post for later |
-| `list_scheduled_posts` | Show upcoming scheduled posts |
-| `cancel_scheduled_post` | Cancel a scheduled post |
-| `add_reminder` | Add a reminder |
-| `list_reminders` | Show active reminders |
+| `schedule_reminder` | Set a reminder |
+| `schedule_task` | Schedule an automated AI task (see below) |
+| `list_scheduled_jobs` | List all scheduled jobs |
+| `cancel_scheduled_job` | Cancel a scheduled job |
+| `pause_scheduled_job` | Pause a job |
+| `resume_scheduled_job` | Resume a paused job |
+| `run_job_now` | Execute a job immediately |
+
+#### Automated Tasks
+
+The `schedule_task` tool lets you schedule tasks that the AI will actually **execute**, not just remind you about.
+
+```
+User: "Check my inbox every hour and respond to leads"
+
+MarketClaw creates a task that:
+1. Runs every hour
+2. Invokes the AI with the task prompt
+3. AI uses tools (check_imap_inbox, reply_imap_email, etc.)
+4. Notifies you of the results
+```
+
+**Parameters:**
+- `name` — Name for the task (e.g., "Email Auto-Responder")
+- `task` — What the AI should do
+- `when` — Schedule (e.g., "every hour", "every day at 9am")
+- `productId` — Product context (optional)
+- `campaignId` — Campaign context (optional)
+- `notify` — Send results to user (default: true)
+
+**Examples:**
+- "Check inbox and respond to leads every 30 minutes"
+- "Post a daily tip to Twitter at 9am"
+- "Generate weekly campaign report every Monday"
 
 ### 📚 Knowledge Tools
 
@@ -75,6 +105,28 @@ Each tool has:
 |------|-------------|
 | `generate_image` | Generate image via DALL-E |
 | `get_image_path` | Get path to generated image |
+
+### 📊 Campaign Tools
+
+| Tool | Description |
+|------|-------------|
+| `create_campaign` | Create a marketing campaign |
+| `list_campaigns` | List campaigns (filter by product/status) |
+| `get_campaign` | Get campaign details with posts |
+| `update_campaign` | Update campaign status/details |
+| `delete_campaign` | Delete a campaign |
+| `add_campaign_post` | Add content to a campaign |
+| `update_campaign_post` | Update a post in a campaign |
+| `set_active_campaign` | Set active campaign context |
+| `get_campaign_metrics` | Get aggregated metrics + costs |
+| `get_campaign_costs` | Detailed cost breakdown |
+
+Campaigns auto-create when you add posts without specifying one:
+```
+User: "Draft a tweet for ProofPing"
+→ Auto-creates "ProofPing — General" campaign
+→ Adds post to it
+```
 
 ### 👥 Leads Tools
 

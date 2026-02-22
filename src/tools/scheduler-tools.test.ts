@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   schedulePostTool,
   scheduleReminderTool,
+  scheduleTaskTool,
   listJobsTool,
   cancelJobTool,
   pauseJobTool,
@@ -401,6 +402,115 @@ describe('Scheduler Tools', () => {
     });
   });
 
+  // ============ schedule_task ============
+  describe('schedule_task', () => {
+    it('schedules an automated task successfully', async () => {
+      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 * * * *');
+      vi.mocked(scheduler.addJob).mockResolvedValue(createMockJob({
+        id: 'task_123',
+        name: 'Email Auto-Responder',
+        type: 'task',
+        payload: {
+          content: 'Check inbox and respond to leads',
+          metadata: { notify: true },
+        },
+      }));
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Email Auto-Responder',
+        task: 'Check inbox and respond to leads',
+        when: 'every hour',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Email Auto-Responder');
+      expect(result.message).toContain('scheduled');
+      expect(result.data?.jobId).toBe('task_123');
+      expect(result.data?.task).toBe('Check inbox and respond to leads');
+      expect(scheduler.addJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Email Auto-Responder',
+          type: 'task',
+          payload: expect.objectContaining({
+            content: 'Check inbox and respond to leads',
+          }),
+        })
+      );
+    });
+
+    it('includes product and campaign context', async () => {
+      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 9 * * *');
+      vi.mocked(scheduler.addJob).mockResolvedValue(createMockJob({ id: 'task_456' }));
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Daily Report',
+        task: 'Generate campaign metrics report',
+        when: 'every day at 9am',
+        productId: 'proofping',
+        campaignId: 'launch-2026',
+      });
+
+      expect(result.success).toBe(true);
+      expect(scheduler.addJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            productId: 'proofping',
+            campaignId: 'launch-2026',
+          }),
+        })
+      );
+    });
+
+    it('handles notify option', async () => {
+      vi.mocked(Scheduler.parseToCron).mockReturnValue('*/30 * * * *');
+      vi.mocked(scheduler.addJob).mockResolvedValue(createMockJob({ id: 'task_789' }));
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Silent Task',
+        task: 'Background cleanup',
+        when: 'every 30 minutes',
+        notify: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.notify).toBe(false);
+      expect(scheduler.addJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            metadata: { notify: false },
+          }),
+        })
+      );
+    });
+
+    it('returns error for invalid schedule', async () => {
+      vi.mocked(Scheduler.parseToCron).mockReturnValue(null);
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Bad Task',
+        task: 'Do something',
+        when: 'whenever',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Could not parse schedule');
+    });
+
+    it('defaults notify to true', async () => {
+      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 * * * *');
+      vi.mocked(scheduler.addJob).mockResolvedValue(createMockJob({ id: 'task_default' }));
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Default Notify',
+        task: 'Check something',
+        when: 'every hour',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.notify).toBe(true);
+    });
+  });
+
   // ============ Tool Metadata ============
   describe('Tool Metadata', () => {
     it('schedule_post has correct definition', () => {
@@ -431,6 +541,20 @@ describe('Scheduler Tools', () => {
     it('cancel_scheduled_job requires jobId', () => {
       expect(cancelJobTool.name).toBe('cancel_scheduled_job');
       expect(cancelJobTool.parameters.required).toContain('jobId');
+    });
+
+    it('schedule_task has correct definition', () => {
+      expect(scheduleTaskTool.name).toBe('schedule_task');
+      expect(scheduleTaskTool.parameters.required).toContain('name');
+      expect(scheduleTaskTool.parameters.required).toContain('task');
+      expect(scheduleTaskTool.parameters.required).toContain('when');
+      expect(scheduleTaskTool.parameters.properties.productId).toBeDefined();
+      expect(scheduleTaskTool.parameters.properties.campaignId).toBeDefined();
+      expect(scheduleTaskTool.parameters.properties.notify).toBeDefined();
+    });
+
+    it('list_scheduled_jobs includes task type', () => {
+      expect(listJobsTool.parameters.properties.type.enum).toContain('task');
     });
   });
 });
