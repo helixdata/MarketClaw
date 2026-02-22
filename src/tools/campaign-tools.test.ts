@@ -594,8 +594,8 @@ describe('Campaign Tools', () => {
   });
 
   describe('tool definitions', () => {
-    it('should have 10 campaign tools', () => {
-      expect(campaignTools).toHaveLength(10);
+    it('should have 11 campaign tools', () => {
+      expect(campaignTools).toHaveLength(11);
     });
 
     it('should have valid tool definitions', () => {
