@@ -7,6 +7,7 @@ import { Telegraf } from 'telegraf';
 import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, ChannelDocument, MessageHandler } from './types.js';
 import { channelRegistry } from './registry.js';
 import { documentParser } from '../documents/index.js';
+import { teamManager } from '../team/index.js';
 import pino from 'pino';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -239,14 +240,32 @@ export class TelegramChannel implements Channel {
   private setupHandlers(): void {
     if (!this.bot || !this.config) return;
 
-    // Auth middleware
+    // Auth middleware - check allowedUsers config OR team membership
     this.bot.use(async (ctx, next) => {
       const userId = ctx.from?.id;
       if (!userId) return;
 
-      if (this.config!.allowedUsers && this.config!.allowedUsers.length > 0) {
-        if (!this.config!.allowedUsers.includes(userId)) {
+      // Check 1: Is user in config allowedUsers?
+      const inAllowedUsers = this.config!.allowedUsers?.includes(userId);
+      
+      // Check 2: Is user a team member?
+      const isTeamMember = teamManager.findMember({ telegramId: userId }) !== undefined;
+
+      // Allow if either check passes
+      // If allowedUsers is not configured (empty/undefined), only team membership matters
+      const hasAllowedUsersConfig = this.config!.allowedUsers && this.config!.allowedUsers.length > 0;
+      
+      if (hasAllowedUsersConfig) {
+        // Config exists: allow if in allowedUsers OR is team member
+        if (!inAllowedUsers && !isTeamMember) {
           logger.warn({ userId }, 'Unauthorized user attempted access');
+          await ctx.reply('🚫 Unauthorized. Contact admin for access.');
+          return;
+        }
+      } else {
+        // No config: only allow team members (prevents open access)
+        if (!isTeamMember) {
+          logger.warn({ userId }, 'Non-team-member attempted access (no allowedUsers configured)');
           await ctx.reply('🚫 Unauthorized. Contact admin for access.');
           return;
         }
