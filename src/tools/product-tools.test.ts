@@ -64,8 +64,13 @@ const mockRm = rm as ReturnType<typeof vi.fn>;
 const mockExistsSync = existsSync as unknown as ReturnType<typeof vi.fn>;
 
 describe('Product Tools', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    
+    // Ensure teamManager mock returns true for admin
+    const { teamManager } = await import('../team/index.js');
+    vi.mocked(teamManager.checkPermission).mockReturnValue(true);
+
     mockMemory.getState.mockResolvedValue({
       lastInteraction: Date.now(),
       preferences: {},
@@ -89,7 +94,7 @@ describe('Product Tools', () => {
       mockMemory.saveProduct.mockResolvedValue(undefined);
       mockMemory.saveState.mockResolvedValue(undefined);
 
-      const result = await createProductTool.execute({
+      const result = await createProductTool.execute({ callerTelegramId: 12345,
         id: 'my_product',
         name: 'My Product',
         tagline: 'The best product',
@@ -111,7 +116,7 @@ describe('Product Tools', () => {
         name: 'Existing Product',
       });
 
-      const result = await createProductTool.execute({
+      const result = await createProductTool.execute({ callerTelegramId: 12345,
         id: 'existing',
         name: 'New Name',
       });
@@ -123,7 +128,7 @@ describe('Product Tools', () => {
     it('should validate product ID format', async () => {
       mockMemory.getProduct.mockResolvedValue(null);
 
-      const result = await createProductTool.execute({
+      const result = await createProductTool.execute({ callerTelegramId: 12345,
         id: 'invalid id!',
         name: 'Test',
       });
@@ -137,7 +142,7 @@ describe('Product Tools', () => {
       mockMemory.saveProduct.mockResolvedValue(undefined);
       mockMemory.saveState.mockResolvedValue(undefined);
 
-      await createProductTool.execute({
+      await createProductTool.execute({ callerTelegramId: 12345,
         id: 'new_product',
         name: 'New Product',
       });
@@ -163,7 +168,7 @@ describe('Product Tools', () => {
       mockExistsSync.mockReturnValue(true);
       mockRm.mockResolvedValue(undefined);
 
-      const result = await deleteProductTool.execute({
+      const result = await deleteProductTool.execute({ callerTelegramId: 12345,
         productId: 'to_delete',
         confirm: true,
       });
@@ -174,7 +179,7 @@ describe('Product Tools', () => {
     });
 
     it('should fail without confirmation', async () => {
-      const result = await deleteProductTool.execute({
+      const result = await deleteProductTool.execute({ callerTelegramId: 12345,
         productId: 'some_product',
         confirm: false,
       });
@@ -186,7 +191,7 @@ describe('Product Tools', () => {
     it('should fail if product not found', async () => {
       mockMemory.getProduct.mockResolvedValue(null);
 
-      const result = await deleteProductTool.execute({
+      const result = await deleteProductTool.execute({ callerTelegramId: 12345,
         productId: 'nonexistent',
         confirm: true,
       });
@@ -210,7 +215,7 @@ describe('Product Tools', () => {
       ]);
       mockExistsSync.mockReturnValue(false);
 
-      await deleteProductTool.execute({
+      await deleteProductTool.execute({ callerTelegramId: 12345,
         productId: 'active_product',
         confirm: true,
       });
@@ -235,7 +240,7 @@ describe('Product Tools', () => {
       });
       mockMemory.saveProduct.mockResolvedValue(undefined);
 
-      const result = await updateProductTool.execute({
+      const result = await updateProductTool.execute({ callerTelegramId: 12345,
         productId: 'test_product',
         name: 'New Name',
       });
@@ -255,7 +260,7 @@ describe('Product Tools', () => {
       });
       mockMemory.saveProduct.mockResolvedValue(undefined);
 
-      const result = await updateProductTool.execute({
+      const result = await updateProductTool.execute({ callerTelegramId: 12345,
         productId: 'test_product',
         name: 'New Name',
         tagline: 'New tagline',
@@ -271,7 +276,7 @@ describe('Product Tools', () => {
     it('should fail if product not found', async () => {
       mockMemory.getProduct.mockResolvedValue(null);
 
-      const result = await updateProductTool.execute({
+      const result = await updateProductTool.execute({ callerTelegramId: 12345,
         productId: 'nonexistent',
         name: 'New Name',
       });
@@ -286,12 +291,44 @@ describe('Product Tools', () => {
         name: 'Name',
       });
 
-      const result = await updateProductTool.execute({
+      const result = await updateProductTool.execute({ callerTelegramId: 12345,
         productId: 'test_product',
       });
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('No updates provided');
+    });
+  });
+
+  describe('Permission checks', () => {
+    it('should deny create_product without callerTelegramId', async () => {
+      const result = await createProductTool.execute({
+        id: 'test',
+        name: 'Test',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('admin permissions');
+    });
+
+    it('should deny delete_product without callerTelegramId', async () => {
+      const result = await deleteProductTool.execute({
+        productId: 'test',
+        confirm: true,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('admin permissions');
+    });
+
+    it('should deny update_product without callerTelegramId', async () => {
+      const result = await updateProductTool.execute({
+        productId: 'test',
+        name: 'New Name',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('admin permissions');
     });
   });
 });

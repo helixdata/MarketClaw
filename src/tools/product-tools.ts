@@ -1,19 +1,50 @@
 /**
  * Product Tools
  * CRUD operations for managing products
+ * Note: These operations require admin permissions
  */
 
 import { Tool, ToolResult } from './types.js';
 import { memory, Product } from '../memory/index.js';
+import { teamManager } from '../team/index.js';
 import { rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 
+/**
+ * Check if caller has admin/manage_products permission
+ */
+function checkAdminPermission(callerTelegramId?: number): ToolResult | null {
+  if (!callerTelegramId) {
+    return {
+      success: false,
+      message: '🔒 This action requires admin permissions. Please provide your caller ID.',
+    };
+  }
+
+  const hasPermission = teamManager.checkPermission(
+    { telegramId: callerTelegramId },
+    'admin'
+  ) || teamManager.checkPermission(
+    { telegramId: callerTelegramId },
+    'manage_products'
+  );
+
+  if (!hasPermission) {
+    return {
+      success: false,
+      message: '🔒 You do not have permission to manage products. Contact an admin.',
+    };
+  }
+
+  return null; // Permission granted
+}
+
 // ============ Create Product ============
 export const createProductTool: Tool = {
   name: 'create_product',
-  description: 'Create a new product to manage marketing for',
+  description: 'Create a new product to manage marketing for (admin only)',
   parameters: {
     type: 'object',
     properties: {
@@ -33,11 +64,19 @@ export const createProductTool: Tool = {
         type: 'string',
         description: 'Full product description',
       },
+      callerTelegramId: {
+        type: 'number',
+        description: 'Telegram ID of the user making the request (for permission check)',
+      },
     },
     required: ['id', 'name'],
   },
 
   async execute(params): Promise<ToolResult> {
+    // Check admin permission
+    const permError = checkAdminPermission(params.callerTelegramId);
+    if (permError) return permError;
+
     // Check if product already exists
     const existing = await memory.getProduct(params.id);
     if (existing) {
@@ -86,7 +125,7 @@ export const createProductTool: Tool = {
 // ============ Delete Product ============
 export const deleteProductTool: Tool = {
   name: 'delete_product',
-  description: 'Delete a product and all its associated data',
+  description: 'Delete a product and all its associated data (admin only)',
   parameters: {
     type: 'object',
     properties: {
@@ -98,11 +137,19 @@ export const deleteProductTool: Tool = {
         type: 'boolean',
         description: 'Must be true to confirm deletion',
       },
+      callerTelegramId: {
+        type: 'number',
+        description: 'Telegram ID of the user making the request (for permission check)',
+      },
     },
     required: ['productId', 'confirm'],
   },
 
   async execute(params): Promise<ToolResult> {
+    // Check admin permission
+    const permError = checkAdminPermission(params.callerTelegramId);
+    if (permError) return permError;
+
     if (!params.confirm) {
       return {
         success: false,
@@ -156,7 +203,7 @@ export const deleteProductTool: Tool = {
 // ============ Update Product ============
 export const updateProductTool: Tool = {
   name: 'update_product',
-  description: 'Update basic product information (name, description)',
+  description: 'Update basic product information (name, description) (admin only)',
   parameters: {
     type: 'object',
     properties: {
@@ -176,11 +223,19 @@ export const updateProductTool: Tool = {
         type: 'string',
         description: 'New description',
       },
+      callerTelegramId: {
+        type: 'number',
+        description: 'Telegram ID of the user making the request (for permission check)',
+      },
     },
     required: ['productId'],
   },
 
   async execute(params): Promise<ToolResult> {
+    // Check admin permission
+    const permError = checkAdminPermission(params.callerTelegramId);
+    if (permError) return permError;
+
     const product = await memory.getProduct(params.productId);
     if (!product) {
       return {
