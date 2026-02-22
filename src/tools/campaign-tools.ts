@@ -585,6 +585,54 @@ const setActiveCampaign: Tool = {
   },
 };
 
+const getCampaignPost: Tool = {
+  name: 'get_campaign_post',
+  description: 'Get the full content of a specific post from a campaign (not truncated).',
+  parameters: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Campaign ID' },
+      postId: { type: 'string', description: 'Post ID' },
+    },
+    required: ['campaignId', 'postId'],
+  },
+  execute: async (params: { campaignId: string; postId: string }): Promise<ToolResult> => {
+    const campaign = await memory.getCampaign(params.campaignId);
+    
+    if (!campaign) {
+      return {
+        success: false,
+        message: `Campaign not found: ${params.campaignId}`,
+      };
+    }
+
+    const post = campaign.posts.find(p => p.id === params.postId);
+    
+    if (!post) {
+      return {
+        success: false,
+        message: `Post not found: ${params.postId}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Post from ${campaign.name}`,
+      data: {
+        id: post.id,
+        channel: post.channel,
+        content: post.content, // Full content, not truncated
+        status: post.status,
+        scheduledAt: post.scheduledAt ? new Date(post.scheduledAt).toISOString() : null,
+        publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString() : null,
+        externalId: post.externalId,
+        externalUrl: post.externalUrl,
+        metrics: post.metrics,
+      },
+    };
+  },
+};
+
 const getCampaignMetrics: Tool = {
   name: 'get_campaign_metrics',
   description: 'Get aggregated metrics for a campaign across all posts and channels.',
@@ -755,6 +803,7 @@ export const campaignTools: Tool[] = [
   createCampaign,
   listCampaigns,
   getCampaign,
+  getCampaignPost,
   updateCampaign,
   deleteCampaign,
   addCampaignPost,
