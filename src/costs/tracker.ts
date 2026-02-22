@@ -50,6 +50,7 @@ export class CostTracker {
     cost: ToolCost;
     agent?: string;
     productId?: string;
+    campaignId?: string;
     userId?: string;
     meta?: Record<string, any>;
   }): Promise<CostRecord> {
@@ -63,6 +64,7 @@ export class CostTracker {
       tool: params.tool,
       agent: params.agent,
       productId: params.productId,
+      campaignId: params.campaignId,
       userId: params.userId,
       cost: params.cost,
       meta: params.meta,
@@ -163,6 +165,7 @@ export class CostTracker {
           if (query.tool && record.tool !== query.tool) continue;
           if (query.agent && record.agent !== query.agent) continue;
           if (query.productId && record.productId !== query.productId) continue;
+          if (query.campaignId && record.campaignId !== query.campaignId) continue;
           if (query.userId && record.userId !== query.userId) continue;
           if (query.provider && record.cost.provider !== query.provider) continue;
 
@@ -201,6 +204,7 @@ export class CostTracker {
       byTool: {},
       byAgent: {},
       byProduct: {},
+      byCampaign: {},
       byProvider: {},
       byUser: {},
       from: new Date(fromTs).toISOString(),
@@ -220,6 +224,9 @@ export class CostTracker {
       }
       if (record.productId) {
         summary.byProduct![record.productId] = (summary.byProduct![record.productId] || 0) + record.cost.usd;
+      }
+      if (record.campaignId) {
+        summary.byCampaign![record.campaignId] = (summary.byCampaign![record.campaignId] || 0) + record.cost.usd;
       }
       if (record.userId) {
         summary.byUser![record.userId] = (summary.byUser![record.userId] || 0) + record.cost.usd;

@@ -21,6 +21,7 @@ import { costTools } from '../costs/tools.js';
 import { brandTools } from './brand-tools.js';
 import { imageLibraryTools } from './image-library-tools.js';
 import { webTools } from './web-tools.js';
+import { campaignTools } from './campaign-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -68,6 +69,9 @@ export async function initializeTools(): Promise<void> {
   // Register web search tools
   toolRegistry.registerAll(webTools, { category: 'research' });
   
+  // Register campaign management tools
+  toolRegistry.registerAll(campaignTools, { category: 'marketing' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -86,3 +90,4 @@ export { costTools } from '../costs/tools.js';
 export { brandTools } from './brand-tools.js';
 export { imageLibraryTools } from './image-library-tools.js';
 export { webTools } from './web-tools.js';
+export { campaignTools } from './campaign-tools.js';
