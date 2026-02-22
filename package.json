@@ -1,7 +1,7 @@
 {
   "name": "marketclaw",
   "version": "0.1.0",
-  "description": "AI-powered marketing agent with persistent memory — Telegram-first, multi-provider",
+  "description": "AI-powered marketing agent with persistent memory — chat-first, multi-provider",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

@@ -54,7 +54,7 @@ npx tsx src/cli.ts setup
 npx tsx src/cli.ts start
 ```
 
-That's it. Open Telegram and start chatting with your bot.
+That's it. Open your configured channel (Telegram, Discord, or Slack) and start chatting.
 
 ---
 
@@ -87,9 +87,9 @@ Use any AI provider:
 - **Images** — Generate with DALL-E, analyze with vision
 - **Leads** — Simple CRM
 
-### 📱 Telegram-First
+### 💬 Chat-First
 
-Your primary interface. Natural conversation, inline buttons, image sharing.
+Works where you already are — Telegram, Discord, Slack, or CLI. Natural conversation, inline buttons, image sharing.
 
 ```
 You: "Schedule a tweet about our new feature for tomorrow 9am"
