@@ -7,6 +7,20 @@
   "bin": {
     "marketclaw": "dist/cli.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/helixdata/MarketClaw.git"
+  },
+  "homepage": "https://github.com/helixdata/MarketClaw#readme",
+  "bugs": {
+    "url": "https://github.com/helixdata/MarketClaw/issues"
+  },
+  "files": [
+    "dist",
+    "extension",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
