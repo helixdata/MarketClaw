@@ -21,7 +21,7 @@ const program = new Command();
 program
   .name('marketclaw')
   .description('🦀 AI Marketing Agent — Telegram-first, multi-provider')
-  .version('0.1.0');
+  .version('0.1.1');
 
 // Start command
 program
