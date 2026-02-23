@@ -568,14 +568,72 @@ program
     const installDir = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
     
     console.log(chalk.cyan('🦀 MarketClaw Update\n'));
+    
+    // Check if installed via npm global
+    const isNpmGlobal = installDir.includes('node_modules');
+    
+    if (isNpmGlobal) {
+      console.log(`Installation: ${chalk.gray('npm global')}`);
+      console.log('\nChecking for updates...');
+      
+      try {
+        const outdated = execSync('npm outdated -g marketclaw', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+        if (!outdated) {
+          console.log(chalk.green('\n✓ Already up to date!'));
+          return;
+        }
+        console.log(chalk.yellow('\nUpdate available:'));
+        console.log(chalk.gray(outdated));
+      } catch (err: any) {
+        // npm outdated exits with code 1 when updates available
+        if (err.stdout) {
+          console.log(chalk.yellow('\nUpdate available:'));
+          console.log(chalk.gray(err.stdout));
+        } else {
+          console.log(chalk.green('\n✓ Already up to date!'));
+          return;
+        }
+      }
+      
+      if (options.check) {
+        console.log(chalk.cyan('\nRun `npm update -g marketclaw` to install.'));
+        return;
+      }
+      
+      if (!options.yes) {
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise<string>(resolve => {
+          rl.question('\nInstall update? [y/N] ', resolve);
+        });
+        rl.close();
+        
+        if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+          console.log(chalk.gray('Update cancelled.'));
+          return;
+        }
+      }
+      
+      console.log('\nUpdating via npm...');
+      try {
+        execSync('npm update -g marketclaw', { stdio: 'inherit' });
+        console.log(chalk.green('\n✓ Update complete!'));
+        console.log(chalk.cyan('\nRestart MarketClaw to use the new version.'));
+      } catch {
+        console.log(chalk.red('✗ Update failed. Try: npm update -g marketclaw'));
+      }
+      return;
+    }
+    
+    // Git installation
     console.log(`Installation: ${chalk.gray(installDir)}`);
     
     try {
       // Check if it's a git repo
       execSync('git rev-parse --git-dir', { cwd: installDir, stdio: 'pipe' });
     } catch {
-      console.log(chalk.red('\n✗ Not a git installation. Update manually or reinstall from GitHub.'));
-      console.log(chalk.gray('  https://github.com/helixdata/MarketClaw'));
+      console.log(chalk.red('\n✗ Not a git or npm installation.'));
+      console.log(chalk.gray('  Install via: npm install -g marketclaw'));
+      console.log(chalk.gray('  Or clone: https://github.com/helixdata/MarketClaw'));
       return;
     }
     
