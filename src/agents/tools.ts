@@ -47,13 +47,15 @@ export const listAgentsTool: Tool = {
 // ============ Delegate Task ============
 export const delegateTaskTool: Tool = {
   name: 'delegate_task',
-  description: 'Delegate a task to a specialized sub-agent. Use this when a task matches an agent\'s expertise.',
+  description: `Delegate a task to a specialized sub-agent. Use this when a task matches an agent's expertise.
+
+**IMPORTANT**: For tasks that take more than a few seconds (research, analysis, content creation), use wait=false. The user will be notified when the task completes.`,
   parameters: {
     type: 'object',
     properties: {
       agentId: {
         type: 'string',
-        description: 'Agent ID to delegate to (e.g., "twitter", "email", "creative")',
+        description: 'Agent ID to delegate to (e.g., "twitter", "email", "creative", "audience")',
       },
       task: {
         type: 'string',
@@ -65,7 +67,7 @@ export const delegateTaskTool: Tool = {
       },
       wait: {
         type: 'boolean',
-        description: 'Wait for the task to complete (default: true)',
+        description: 'Wait for task to complete. Use false for long-running tasks (research, analysis). Default: true for quick tasks, but prefer false for anything taking >10 seconds.',
       },
     },
     required: ['agentId', 'task'],
@@ -97,11 +99,17 @@ export const delegateTaskTool: Tool = {
       }
     }
 
-    // Spawn the task
-    const task = await subAgentRegistry.spawn(params.agentId, params.task, context);
+    // For async tasks (wait: false), request notification on completion
+    const isAsync = params.wait === false;
+    
+    // Spawn the task with notification flag for async tasks
+    const task = await subAgentRegistry.spawn(params.agentId, params.task, {
+      context,
+      notifyOnComplete: isAsync,
+    });
 
     // Wait for completion if requested (default: true)
-    if (params.wait !== false) {
+    if (!isAsync) {
       try {
         const completed = await subAgentRegistry.waitForTask(task.id, 120000); // 2 min timeout
         
@@ -131,13 +139,15 @@ export const delegateTaskTool: Tool = {
       }
     }
 
+    // Async task - return immediately with acknowledgment
     return {
       success: true,
-      message: `Task delegated to ${agent.config.identity.name}`,
+      message: `${agent.config.identity.emoji} Got it! I've handed this to **${agent.config.identity.name}**. I'll let you know when it's done.`,
       data: {
         taskId: task.id,
         agentId: params.agentId,
         agentName: agent.config.identity.name,
+        async: true,
       },
     };
   },
