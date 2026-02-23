@@ -269,7 +269,7 @@ export const listProductImagesTool: Tool = {
 // ============ Get Product Image ============
 export const getProductImageTool: Tool = {
   name: 'get_product_image',
-  description: 'Get details of a specific image by ID',
+  description: 'Get and display a specific product image by ID. Use this to show an image to the user.',
   parameters: {
     type: 'object',
     properties: {
@@ -310,9 +310,14 @@ export const getProductImageTool: Tool = {
         };
       }
 
+      // If image has a local path, include SEND_IMAGE directive to display it
+      const message = image.path 
+        ? `SEND_IMAGE:${image.path}`
+        : `Image: ${image.name}`;
+
       return {
         success: true,
-        message: `Image: ${image.name}`,
+        message,
         data: {
           id: image.id,
           name: image.name,

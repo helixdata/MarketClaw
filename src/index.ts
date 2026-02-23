@@ -6,13 +6,15 @@
 import { loadConfig, buildSystemPrompt, DEFAULT_SYSTEM_PROMPT } from './config/index.js';
 import { providers } from './providers/index.js';
 import { getCredentials } from './auth/index.js';
-import { channelRegistry, ChannelMessage, ChannelResponse, Channel } from './channels/index.js';
+import { channelRegistry, ChannelMessage, ChannelResponse, Channel, ChannelAttachment } from './channels/index.js';
 import { memory } from './memory/index.js';
 import { knowledge } from './knowledge/index.js';
 import { scheduler } from './scheduler/index.js';
 import { initializeTools, toolRegistry } from './tools/index.js';
 import { initializeSkills } from './skills/index.js';
 import { initializeAgents, agentTools, subAgentRegistry } from './agents/index.js';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 import { teamManager, teamTools, getToolPermission } from './team/index.js';
 import { approvalManager, approvalTools } from './approvals/index.js';
 import { Message, MessageContent, TextContent, ImageContent } from './providers/types.js';
@@ -160,6 +162,7 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   let finalResponse = '';
   let iterations = 0;
   const maxIterations = 10;
+  const pendingImages: string[] = []; // Track images to send from tool results
 
   while (iterations < maxIterations) {
     iterations++;
@@ -223,6 +226,15 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
       
       logger.info({ tool: toolCall.name, success: result.success }, 'Tool executed');
 
+      // Check for SEND_IMAGE directive in tool result
+      if (result.message && typeof result.message === 'string' && result.message.startsWith('SEND_IMAGE:')) {
+        const imagePath = result.message.replace('SEND_IMAGE:', '');
+        if (existsSync(imagePath)) {
+          pendingImages.push(imagePath);
+          logger.info({ imagePath }, 'Image queued for sending');
+        }
+      }
+
       history.push({
         role: 'tool',
         content: JSON.stringify(result),
@@ -241,9 +253,38 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   await memory.appendToSession(userId, { role: 'user', content: message.text });
   await memory.appendToSession(userId, { role: 'assistant', content: finalResponse });
 
-  logger.info({ channel: channel.name, userId: message.userId, iterations }, 'Response ready');
+  logger.info({ channel: channel.name, userId: message.userId, iterations, pendingImages: pendingImages.length }, 'Response ready');
 
-  return { text: finalResponse };
+  // Build response with any pending images as attachments
+  const response: ChannelResponse = { text: finalResponse };
+  
+  if (pendingImages.length > 0) {
+    response.attachments = [];
+    for (const imagePath of pendingImages) {
+      try {
+        const buffer = readFileSync(imagePath);
+        const filename = path.basename(imagePath);
+        const ext = path.extname(filename).toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+        };
+        response.attachments.push({
+          buffer,
+          filename,
+          mimeType: mimeTypes[ext] || 'image/png',
+        });
+        logger.info({ filename }, 'Image attached to response');
+      } catch (err) {
+        logger.error({ err, imagePath }, 'Failed to read image for attachment');
+      }
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -377,17 +418,23 @@ export async function startAgent(): Promise<void> {
 
   // Initialize browser extension bridge
   toolRegistry.registerAll(browserTools, { category: 'utility' });
+  
+  // Add error listener BEFORE starting to prevent unhandled error crashes
+  extensionBridge.on('error', (err: any) => {
+    logger.warn({ err: err.message || err }, 'Browser extension bridge error (non-fatal)');
+  });
+  extensionBridge.on('connect', (client) => {
+    logger.info({ version: client.version, capabilities: client.capabilities }, 'Browser extension connected');
+  });
+  extensionBridge.on('disconnect', () => {
+    logger.info('Browser extension disconnected');
+  });
+  
   try {
     await extensionBridge.start();
-    extensionBridge.on('connect', (client) => {
-      logger.info({ version: client.version, capabilities: client.capabilities }, 'Browser extension connected');
-    });
-    extensionBridge.on('disconnect', () => {
-      logger.info('Browser extension disconnected');
-    });
     logger.info({ port: 7890 }, 'Browser extension bridge started');
-  } catch (err) {
-    logger.warn({ err }, 'Browser extension bridge failed to start (non-fatal)');
+  } catch (err: any) {
+    logger.warn({ err: err.message || err }, 'Browser extension bridge failed to start (non-fatal, browser automation disabled)');
   }
   
   // Set up approval notifications

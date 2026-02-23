@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MarketClaw Automation",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "description": "Browser automation for MarketClaw - post to social media programmatically",
   "permissions": [
     "tabs",
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "https://twitter.com/*",
