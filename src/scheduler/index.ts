@@ -19,7 +19,10 @@ export interface ScheduledJob {
   id: string;
   name: string;
   description?: string;
-  cronExpression: string;
+  cronExpression?: string;    // For recurring jobs
+  executeAt?: number;         // For one-shot jobs (timestamp)
+  oneShot?: boolean;          // True for one-shot jobs
+  deleteAfterRun?: boolean;   // Auto-delete after successful run
   type: 'post' | 'reminder' | 'task' | 'heartbeat';
   enabled: boolean;
   payload: {
@@ -46,6 +49,7 @@ export class Scheduler extends EventEmitter {
   private workspacePath: string;
   private jobs: Map<string, ScheduledJob> = new Map();
   private tasks: Map<string, ScheduledTask> = new Map();
+  private timeouts: Map<string, NodeJS.Timeout> = new Map();  // For one-shot jobs
   private onJobExecute?: (job: ScheduledJob) => Promise<void>;
 
   constructor(config?: SchedulerConfig) {
@@ -87,41 +91,82 @@ export class Scheduler extends EventEmitter {
   }
 
   /**
-   * Start a cron job
+   * Start a job (cron or one-shot)
    */
   private startJob(job: ScheduledJob): void {
+    // Clear any existing task/timeout
     if (this.tasks.has(job.id)) {
       this.tasks.get(job.id)?.stop();
+      this.tasks.delete(job.id);
+    }
+    if (this.timeouts.has(job.id)) {
+      clearTimeout(this.timeouts.get(job.id));
+      this.timeouts.delete(job.id);
     }
 
-    if (!cron.validate(job.cronExpression)) {
+    // One-shot job
+    if (job.oneShot && job.executeAt) {
+      const delay = job.executeAt - Date.now();
+      
+      if (delay <= 0) {
+        // Already past - execute immediately
+        this.executeJob(job);
+        return;
+      }
+
+      job.nextRun = job.executeAt;
+      
+      const timeout = setTimeout(async () => {
+        await this.executeJob(job);
+        
+        // Auto-delete one-shot jobs after execution
+        if (job.deleteAfterRun !== false) {
+          this.timeouts.delete(job.id);
+          this.jobs.delete(job.id);
+          await this.save();
+        }
+      }, delay);
+
+      this.timeouts.set(job.id, timeout);
+      return;
+    }
+
+    // Recurring cron job
+    if (!job.cronExpression || !cron.validate(job.cronExpression)) {
       console.error(`Invalid cron expression for job ${job.id}: ${job.cronExpression}`);
       return;
     }
 
     const task = cron.schedule(job.cronExpression, async () => {
-      job.lastRun = Date.now();
-      job.runCount++;
-      job.updatedAt = Date.now();
-      
-      this.emit('job:execute', job);
-      
-      if (this.onJobExecute) {
-        try {
-          await this.onJobExecute(job);
-        } catch (err) {
-          console.error(`Error executing job ${job.id}:`, err);
-          this.emit('job:error', job, err);
-        }
-      }
-
-      await this.save();
+      await this.executeJob(job);
     });
 
     this.tasks.set(job.id, task);
     
     // Calculate next run
     job.nextRun = this.getNextRun(job.cronExpression);
+  }
+
+  /**
+   * Execute a job
+   */
+  private async executeJob(job: ScheduledJob): Promise<void> {
+    job.lastRun = Date.now();
+    job.runCount++;
+    job.updatedAt = Date.now();
+    
+    this.emit('job:execute', job);
+    
+    if (this.onJobExecute) {
+      try {
+        await this.onJobExecute(job);
+      } catch (err) {
+        console.error(`Error executing job ${job.id}:`, err);
+        this.emit('job:error', job, err);
+      }
+    }
+
+    await this.save();
   }
 
   /**
@@ -265,6 +310,11 @@ export class Scheduler extends EventEmitter {
       task.stop();
     }
     this.tasks.clear();
+    
+    for (const timeout of this.timeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.timeouts.clear();
   }
 
   /**
@@ -310,6 +360,119 @@ export class Scheduler extends EventEmitter {
     }
 
     return null;
+  }
+
+  /**
+   * Parse human-readable time to timestamp for one-shot scheduling
+   * Supports: "in X minutes/hours", "at HH:MM", "tomorrow at HH:MM", etc.
+   */
+  static parseToTimestamp(input: string): number | null {
+    const lower = input.toLowerCase().trim();
+    const now = new Date();
+
+    // "in X minutes"
+    const inMinMatch = lower.match(/in (\d+) minutes?/);
+    if (inMinMatch) {
+      return now.getTime() + parseInt(inMinMatch[1]) * 60 * 1000;
+    }
+
+    // "in X hours"
+    const inHourMatch = lower.match(/in (\d+) hours?/);
+    if (inHourMatch) {
+      return now.getTime() + parseInt(inHourMatch[1]) * 60 * 60 * 1000;
+    }
+
+    // "in X seconds" (mostly for testing)
+    const inSecMatch = lower.match(/in (\d+) seconds?/);
+    if (inSecMatch) {
+      return now.getTime() + parseInt(inSecMatch[1]) * 1000;
+    }
+
+    // "at HH:MM" or "at H:MM" (today, or tomorrow if time has passed)
+    const atTimeMatch = lower.match(/^at (\d{1,2}):(\d{2})$/);
+    if (atTimeMatch) {
+      const hours = parseInt(atTimeMatch[1]);
+      const minutes = parseInt(atTimeMatch[2]);
+      const target = new Date(now);
+      target.setHours(hours, minutes, 0, 0);
+      
+      // If time has passed today, schedule for tomorrow
+      if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target.getTime();
+    }
+
+    // "at HH:MM am/pm" or "at H am/pm"
+    const atTimeAmPmMatch = lower.match(/at (\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
+    if (atTimeAmPmMatch) {
+      let hours = parseInt(atTimeAmPmMatch[1]);
+      const minutes = atTimeAmPmMatch[2] ? parseInt(atTimeAmPmMatch[2]) : 0;
+      const isPm = atTimeAmPmMatch[3] === 'pm';
+      
+      if (isPm && hours !== 12) hours += 12;
+      if (!isPm && hours === 12) hours = 0;
+      
+      const target = new Date(now);
+      target.setHours(hours, minutes, 0, 0);
+      
+      if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target.getTime();
+    }
+
+    // "tomorrow at HH:MM"
+    const tomorrowMatch = lower.match(/tomorrow at (\d{1,2}):(\d{2})/);
+    if (tomorrowMatch) {
+      const hours = parseInt(tomorrowMatch[1]);
+      const minutes = parseInt(tomorrowMatch[2]);
+      const target = new Date(now);
+      target.setDate(target.getDate() + 1);
+      target.setHours(hours, minutes, 0, 0);
+      return target.getTime();
+    }
+
+    // "tonight at HH:MM" (assumes PM if ambiguous)
+    const tonightMatch = lower.match(/tonight at (\d{1,2}):(\d{2})/);
+    if (tonightMatch) {
+      let hours = parseInt(tonightMatch[1]);
+      const minutes = parseInt(tonightMatch[2]);
+      
+      // Assume PM for "tonight" if hours < 12
+      if (hours < 12) hours += 12;
+      
+      const target = new Date(now);
+      target.setHours(hours, minutes, 0, 0);
+      
+      // If already passed, it's for tomorrow night
+      if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target.getTime();
+    }
+
+    // ISO timestamp
+    const isoDate = Date.parse(input);
+    if (!isNaN(isoDate)) {
+      return isoDate;
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if input looks like a one-shot time (vs recurring)
+   */
+  static isOneShot(input: string): boolean {
+    const lower = input.toLowerCase().trim();
+    return (
+      lower.startsWith('in ') ||
+      lower.startsWith('at ') ||
+      lower.startsWith('tomorrow') ||
+      lower.startsWith('tonight') ||
+      /^\d{4}-\d{2}-\d{2}/.test(input)  // ISO date
+    );
   }
 }
 

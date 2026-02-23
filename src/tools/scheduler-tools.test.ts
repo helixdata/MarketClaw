@@ -27,6 +27,8 @@ vi.mock('../scheduler/index.js', () => {
 
   const MockScheduler = {
     parseToCron: vi.fn(),
+    parseToTimestamp: vi.fn(),
+    isOneShot: vi.fn(),
   };
 
   return {
@@ -58,6 +60,8 @@ function createMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
 describe('Scheduler Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: treat schedules as recurring (not one-shot)
+    vi.mocked(Scheduler.isOneShot).mockReturnValue(false);
   });
 
   // ============ schedule_reminder ============
@@ -76,7 +80,7 @@ describe('Scheduler Tools', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('Reminder set for at 14:00');
+      expect(result.message).toContain('Recurring reminder set');
       expect(result.data.jobId).toBe('job_reminder_1');
 
       expect(scheduler.addJob).toHaveBeenCalledWith({
@@ -87,27 +91,33 @@ describe('Scheduler Tools', () => {
         enabled: true,
         payload: {
           content: 'Remember to check metrics!',
-          metadata: { recurring: false },
         },
       });
     });
 
-    it('passes recurring flag when specified', async () => {
-      const mockJob = createMockJob({ type: 'reminder' });
-      vi.mocked(Scheduler.parseToCron).mockReturnValue('0 9 * * 1');
+    it('schedules one-shot reminder successfully', async () => {
+      const mockJob = createMockJob({
+        id: 'job_oneshot_1',
+        type: 'reminder',
+        oneShot: true,
+        executeAt: Date.now() + 1200000, // 20 minutes from now
+      });
+      vi.mocked(Scheduler.isOneShot).mockReturnValue(true);
+      vi.mocked(Scheduler.parseToTimestamp).mockReturnValue(Date.now() + 1200000);
       vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
 
-      await scheduleReminderTool.execute({
-        message: 'Weekly standup!',
-        when: 'every Monday',
-        recurring: true,
+      const result = await scheduleReminderTool.execute({
+        message: 'Quick reminder',
+        when: 'in 20 minutes',
       });
 
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Reminder set for');
+      expect(result.data.oneShot).toBe(true);
       expect(scheduler.addJob).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({
-            metadata: { recurring: true },
-          }),
+          oneShot: true,
+          deleteAfterRun: true,
         })
       );
     });
