@@ -567,7 +567,8 @@ describe('Image Library Tools', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.message).toContain('Detailed Image');
+      // Message contains SEND_IMAGE directive when path exists
+      expect(result.message).toBe('SEND_IMAGE:/path/detail.png');
       expect(result.data.id).toBe('img_detail');
       expect(result.data.url).toBe('https://example.com/original.png');
       expect(result.data.dimensions).toEqual({ width: 1280, height: 720 });
