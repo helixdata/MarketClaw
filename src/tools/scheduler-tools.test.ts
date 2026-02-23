@@ -133,6 +133,19 @@ describe('Scheduler Tools', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('Could not parse schedule');
     });
+
+    it('returns error for invalid one-shot schedule', async () => {
+      vi.mocked(Scheduler.isOneShot).mockReturnValue(true);
+      vi.mocked(Scheduler.parseToTimestamp).mockReturnValue(null);
+
+      const result = await scheduleReminderTool.execute({
+        message: 'Reminder',
+        when: 'at invalid time',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Could not parse schedule');
+    });
   });
 
   // ============ list_scheduled_jobs ============
@@ -226,6 +239,35 @@ describe('Scheduler Tools', () => {
       const result = await listJobsTool.execute({});
 
       expect(result.data[0].lastRun).toBeNull();
+    });
+
+    it('formats one-shot jobs correctly', async () => {
+      const executeAt = Date.now() + 3600000;
+      const mockJobs = [
+        createMockJob({
+          id: 'oneshot_job',
+          name: 'One Shot',
+          oneShot: true,
+          executeAt,
+          cronExpression: undefined,
+          payload: { content: 'Do this once' },
+        }),
+      ];
+      vi.mocked(scheduler.listJobs).mockReturnValue(mockJobs);
+
+      const result = await listJobsTool.execute({});
+
+      expect(result.data[0].oneShot).toBe(true);
+      expect(result.data[0].schedule).toContain('one-shot at');
+    });
+
+    it('handles jobs with no nextRun', async () => {
+      const mockJobs = [createMockJob({ nextRun: undefined })];
+      vi.mocked(scheduler.listJobs).mockReturnValue(mockJobs);
+
+      const result = await listJobsTool.execute({});
+
+      expect(result.data[0].nextRun).toBeNull();
     });
   });
 
@@ -423,6 +465,88 @@ describe('Scheduler Tools', () => {
 
       expect(result.success).toBe(true);
       expect(result.data?.notify).toBe(true);
+    });
+
+    it('schedules one-shot task successfully', async () => {
+      const executeAt = Date.now() + 7200000; // 2 hours from now
+      const mockJob = createMockJob({
+        id: 'task_oneshot_1',
+        name: 'One-time Report',
+        type: 'task',
+        oneShot: true,
+        executeAt,
+      });
+      vi.mocked(Scheduler.isOneShot).mockReturnValue(true);
+      vi.mocked(Scheduler.parseToTimestamp).mockReturnValue(executeAt);
+      vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
+
+      const result = await scheduleTaskTool.execute({
+        name: 'One-time Report',
+        task: 'Generate metrics report for this week',
+        when: 'in 2 hours',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('scheduled');
+      expect(result.message).toContain('One-time Report');
+      expect(result.data?.oneShot).toBe(true);
+      expect(result.data?.executeAt).toBe(executeAt);
+      expect(scheduler.addJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'One-time Report',
+          oneShot: true,
+          deleteAfterRun: true,
+          type: 'task',
+        })
+      );
+    });
+
+    it('returns error for invalid one-shot task schedule', async () => {
+      vi.mocked(Scheduler.isOneShot).mockReturnValue(true);
+      vi.mocked(Scheduler.parseToTimestamp).mockReturnValue(null);
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Bad Task',
+        task: 'Do something',
+        when: 'at invalid time',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Could not parse schedule');
+      expect(result.message).toContain('in 20 minutes');
+    });
+
+    it('one-shot task includes context and notify option', async () => {
+      const executeAt = Date.now() + 3600000;
+      const mockJob = createMockJob({
+        id: 'task_context',
+        oneShot: true,
+        executeAt,
+      });
+      vi.mocked(Scheduler.isOneShot).mockReturnValue(true);
+      vi.mocked(Scheduler.parseToTimestamp).mockReturnValue(executeAt);
+      vi.mocked(scheduler.addJob).mockResolvedValue(mockJob);
+
+      const result = await scheduleTaskTool.execute({
+        name: 'Contextual Task',
+        task: 'Run analysis',
+        when: 'in 1 hour',
+        productId: 'prod123',
+        campaignId: 'camp456',
+        notify: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.notify).toBe(false);
+      expect(scheduler.addJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            productId: 'prod123',
+            campaignId: 'camp456',
+            metadata: { notify: false },
+          }),
+        })
+      );
     });
   });
 

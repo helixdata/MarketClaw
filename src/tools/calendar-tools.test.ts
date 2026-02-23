@@ -678,6 +678,29 @@ describe('Calendar Tools', () => {
       expect(result.success).toBe(true);
       expect(result.data.authenticated).toBe(true);
     });
+
+    it('should fail with unknown action', async () => {
+      const result = await googleCalendarAuthTool.execute({ action: 'invalid-action' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Unknown action');
+    });
+  });
+
+  describe('list_calendars', () => {
+    it('should handle API errors', async () => {
+      const mockCalendar = {
+        calendarList: {
+          list: vi.fn().mockRejectedValue(new Error('API Error')),
+        },
+      };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockCalendar as any);
+
+      const result = await listCalendarsTool.execute({});
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to list calendars');
+    });
   });
 
   // ============ Calendar Resolution Logic ============

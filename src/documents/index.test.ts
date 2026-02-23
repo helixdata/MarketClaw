@@ -221,6 +221,15 @@ describe('DocumentParser', () => {
       expect(parser.isSupportedDocumentByFilename('application/octet-stream', 'test.xyz')).toBe(false);
       expect(parser.isSupportedDocumentByFilename('application/octet-stream', 'test.jpg')).toBe(false);
     });
+
+    it('should return false for files without extension', () => {
+      expect(parser.isSupportedDocumentByFilename('application/octet-stream', 'noextension')).toBe(false);
+    });
+
+    it('should handle uppercase extensions', () => {
+      expect(parser.isSupportedDocumentByFilename('application/octet-stream', 'test.PDF')).toBe(true);
+      expect(parser.isSupportedDocumentByFilename('application/octet-stream', 'test.DOCX')).toBe(true);
+    });
   });
 
   describe('getSupportedMimeTypes', () => {

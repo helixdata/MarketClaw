@@ -10,6 +10,7 @@ import {
   agentInfoTool,
   setAgentModelTool,
   listAgentModelsTool,
+  recommendAgentModelTool,
   createAgentTool,
   agentTools,
 } from './tools.js';
@@ -607,6 +608,120 @@ describe('list_agent_models', () => {
 
     expect(result.success).toBe(true);
     expect(result.data?.agents).toEqual([]);
+  });
+});
+
+describe('recommend_agent_model', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should have correct metadata', () => {
+    expect(recommendAgentModelTool.name).toBe('recommend_agent_model');
+    expect(recommendAgentModelTool.parameters.properties).toHaveProperty('agentId');
+  });
+
+  it('should recommend model for specific agent', async () => {
+    const agent = createMockAgent({ id: 'twitter', name: 'Twitter Agent', emoji: '🐦', model: 'gpt-4o' });
+    vi.mocked(subAgentRegistry.get).mockReturnValue(agent);
+
+    const result = await recommendAgentModelTool.execute({ agentId: 'twitter' });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('🐦');
+    expect(result.message).toContain('Twitter Agent');
+    expect(result.message).toContain('Recommended:');
+    expect(result.data?.agentId).toBe('twitter');
+    expect(result.data?.recommended).toBeDefined();
+  });
+
+  it('should fail when agent not found', async () => {
+    vi.mocked(subAgentRegistry.get).mockReturnValue(undefined);
+
+    const result = await recommendAgentModelTool.execute({ agentId: 'nonexistent' });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Agent not found');
+  });
+
+  it('should return default recommendation for unknown agent specialty', async () => {
+    const agent = createMockAgent({ id: 'unknown-specialty', name: 'Unknown', emoji: '❓' });
+    vi.mocked(subAgentRegistry.get).mockReturnValue(agent);
+
+    const result = await recommendAgentModelTool.execute({ agentId: 'unknown-specialty' });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('No specific recommendation');
+    expect(result.data?.recommended).toBe('default');
+  });
+
+  it('should indicate when current model is optimal', async () => {
+    // gpt-4o-mini is the recommended model for twitter
+    const agent = createMockAgent({ id: 'twitter', name: 'Twitter', emoji: '🐦', model: 'gpt-4o-mini' });
+    vi.mocked(subAgentRegistry.get).mockReturnValue(agent);
+
+    const result = await recommendAgentModelTool.execute({ agentId: 'twitter' });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.isOptimal).toBe(true);
+    expect(result.message).toContain('✓');
+  });
+
+  it('should recommend for all agents when no agentId specified', async () => {
+    const mockAgents = [
+      createMockAgent({ id: 'twitter', name: 'Twitter', emoji: '🐦', model: 'gpt-4o-mini' }),
+      createMockAgent({ id: 'linkedin', name: 'LinkedIn', emoji: '💼', model: 'gpt-4o' }),
+      createMockAgent({ id: 'unknown', name: 'Unknown', emoji: '❓', model: undefined }),
+    ];
+    vi.mocked(subAgentRegistry.listEnabled).mockReturnValue(mockAgents);
+
+    const result = await recommendAgentModelTool.execute({});
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('Agent Model Recommendations');
+    expect(result.data?.recommendations).toHaveLength(3);
+    // Twitter with optimal model
+    expect(result.data?.recommendations[0].isOptimal).toBe(true);
+    // LinkedIn with non-optimal model (should recommend claude-3-5-sonnet)
+    expect(result.data?.recommendations[1].isOptimal).toBe(false);
+    expect(result.data?.recommendations[1].recommended).toBe('claude-3-5-sonnet');
+  });
+
+  it('should show optimization needed count when applicable', async () => {
+    const mockAgents = [
+      createMockAgent({ id: 'twitter', name: 'Twitter', emoji: '🐦', model: 'gpt-4o' }), // not optimal
+      createMockAgent({ id: 'email', name: 'Email', emoji: '📧', model: 'gpt-4o' }), // not optimal
+    ];
+    vi.mocked(subAgentRegistry.listEnabled).mockReturnValue(mockAgents);
+
+    const result = await recommendAgentModelTool.execute({});
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('could be optimized');
+  });
+
+  it('should show all optimal message when all agents are using optimal models', async () => {
+    const mockAgents = [
+      createMockAgent({ id: 'twitter', name: 'Twitter', emoji: '🐦', model: 'gpt-4o-mini' }),
+    ];
+    vi.mocked(subAgentRegistry.listEnabled).mockReturnValue(mockAgents);
+
+    const result = await recommendAgentModelTool.execute({});
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('All agents are using optimal models');
+  });
+
+  it('should include alternatives in recommendation for specific agent', async () => {
+    const agent = createMockAgent({ id: 'linkedin', name: 'LinkedIn', emoji: '💼', model: 'gpt-4o' });
+    vi.mocked(subAgentRegistry.get).mockReturnValue(agent);
+
+    const result = await recommendAgentModelTool.execute({ agentId: 'linkedin' });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('Alternatives:');
+    expect(result.data?.alternatives).toBeDefined();
+    expect(result.data?.alternatives.length).toBeGreaterThan(0);
   });
 });
 
