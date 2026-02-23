@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Use vi.hoisted for mocks that need to be available before module loading
-const { mockMemory, mockCostTracker } = vi.hoisted(() => ({
+const { mockMemory, mockCostTracker, mockTeamManager, mockFs } = vi.hoisted(() => ({
   mockMemory: {
     getCampaign: vi.fn(),
     saveCampaign: vi.fn(),
@@ -17,6 +17,13 @@ const { mockMemory, mockCostTracker } = vi.hoisted(() => ({
   mockCostTracker: {
     summarize: vi.fn(),
   },
+  mockTeamManager: {
+    findMember: vi.fn(),
+    updateMember: vi.fn(),
+  },
+  mockFs: {
+    unlink: vi.fn(),
+  },
 }));
 
 vi.mock('../memory/index.js', () => ({
@@ -25,6 +32,14 @@ vi.mock('../memory/index.js', () => ({
 
 vi.mock('../costs/tracker.js', () => ({
   costTracker: mockCostTracker,
+}));
+
+vi.mock('../team/index.js', () => ({
+  teamManager: mockTeamManager,
+}));
+
+vi.mock('fs/promises', () => ({
+  unlink: mockFs.unlink,
 }));
 
 // Import after mocks
@@ -198,6 +213,158 @@ describe('Campaign Tools', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('Campaign not found');
     });
+
+    it('should truncate long post content in preview', async () => {
+      const longContent = 'A'.repeat(200);
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Test Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { id: 'post1', channel: 'twitter', content: longContent, status: 'draft' } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.getProduct.mockResolvedValue({ id: 'p1', name: 'Product' });
+
+      const tool = getTool('get_campaign');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.posts[0].content.length).toBe(103); // 100 + '...'
+      expect(result.data?.posts[0].content).toContain('...');
+    });
+
+    it('should handle campaign with dates and metrics', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Test Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { id: 'post1', channel: 'twitter', content: 'Short', status: 'scheduled', scheduledAt: Date.now() + 86400000, metrics: { impressions: 100 } } as CampaignPost,
+        ],
+        startDate: Date.now(),
+        endDate: Date.now() + 86400000 * 30,
+        metrics: { totalReach: 500 },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.getProduct.mockResolvedValue({ id: 'p1', name: 'Product' });
+
+      const tool = getTool('get_campaign');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.startDate).toBeDefined();
+      expect(result.data?.endDate).toBeDefined();
+      expect(result.data?.metrics).toBeDefined();
+      expect(result.data?.posts[0].scheduledAt).toBeDefined();
+    });
+  });
+
+  describe('get_campaign_post', () => {
+    it('should get full post content', async () => {
+      const fullContent = 'A'.repeat(500);
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Test Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { 
+            id: 'post1', 
+            channel: 'twitter', 
+            content: fullContent, 
+            status: 'published',
+            publishedAt: Date.now(),
+            externalId: 'ext-123',
+            externalUrl: 'https://twitter.com/post/123',
+            metrics: { impressions: 1000, likes: 50 },
+          } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+
+      const tool = getTool('get_campaign_post');
+      const result = await tool.execute({ campaignId: 'c1', postId: 'post1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.content).toBe(fullContent); // Full content, not truncated
+      expect(result.data?.content.length).toBe(500);
+      expect(result.data?.externalId).toBe('ext-123');
+      expect(result.data?.externalUrl).toBe('https://twitter.com/post/123');
+      expect(result.data?.metrics).toEqual({ impressions: 1000, likes: 50 });
+    });
+
+    it('should fail if campaign not found', async () => {
+      mockMemory.getCampaign.mockResolvedValue(null);
+
+      const tool = getTool('get_campaign_post');
+      const result = await tool.execute({ campaignId: 'nonexistent', postId: 'post1' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Campaign not found');
+    });
+
+    it('should fail if post not found', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Test Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+
+      const tool = getTool('get_campaign_post');
+      const result = await tool.execute({ campaignId: 'c1', postId: 'nonexistent' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Post not found');
+    });
+
+    it('should handle scheduled post without publishedAt', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Test Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { 
+            id: 'post1', 
+            channel: 'twitter', 
+            content: 'Scheduled content', 
+            status: 'scheduled',
+            scheduledAt: Date.now() + 86400000,
+          } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+
+      const tool = getTool('get_campaign_post');
+      const result = await tool.execute({ campaignId: 'c1', postId: 'post1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.status).toBe('scheduled');
+      expect(result.data?.scheduledAt).toBeDefined();
+      expect(result.data?.publishedAt).toBeNull();
+    });
   });
 
   describe('update_campaign', () => {
@@ -236,6 +403,59 @@ describe('Campaign Tools', () => {
 
       expect(result.success).toBe(false);
     });
+
+    it('should update campaign dates', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'draft',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('update_campaign');
+      const result = await tool.execute({
+        campaignId: 'c1',
+        startDate: '2026-04-01T00:00:00Z',
+        endDate: '2026-04-30T00:00:00Z',
+      });
+
+      expect(result.success).toBe(true);
+      const savedCampaign = mockMemory.saveCampaign.mock.calls[0][0];
+      expect(savedCampaign.startDate).toBe(new Date('2026-04-01T00:00:00Z').getTime());
+      expect(savedCampaign.endDate).toBe(new Date('2026-04-30T00:00:00Z').getTime());
+    });
+
+    it('should update campaign notes including empty string', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'draft',
+        channels: [],
+        posts: [],
+        notes: 'Old notes',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('update_campaign');
+      const result = await tool.execute({
+        campaignId: 'c1',
+        notes: '', // Empty string should clear notes
+      });
+
+      expect(result.success).toBe(true);
+      const savedCampaign = mockMemory.saveCampaign.mock.calls[0][0];
+      expect(savedCampaign.notes).toBe('');
+    });
   });
 
   describe('delete_campaign', () => {
@@ -255,6 +475,49 @@ describe('Campaign Tools', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('Campaign not found');
+    });
+
+    it('should delete campaign successfully', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign to Delete',
+        status: 'draft',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockFs.unlink.mockResolvedValue(undefined);
+
+      const tool = getTool('delete_campaign');
+      const result = await tool.execute({ campaignId: 'c1', confirm: true });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('deleted');
+      expect(mockFs.unlink).toHaveBeenCalled();
+    });
+
+    it('should handle file deletion error', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'draft',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockFs.unlink.mockRejectedValue(new Error('ENOENT: file not found'));
+
+      const tool = getTool('delete_campaign');
+      const result = await tool.execute({ campaignId: 'c1', confirm: true });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to delete');
     });
   });
 
@@ -356,6 +619,130 @@ describe('Campaign Tools', () => {
       expect(result.success).toBe(true);
       expect(result.data?.status).toBe('scheduled');
     });
+
+    it('should fail when no product specified and no active product', async () => {
+      mockMemory.getCampaign.mockResolvedValue(null);
+      mockMemory.getState.mockResolvedValue({ preferences: {} }); // No activeProduct
+
+      const tool = getTool('add_campaign_post');
+      const result = await tool.execute({
+        channel: 'twitter',
+        content: 'Hello world!',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No campaign specified and no active product');
+    });
+
+    it('should fail when product not found', async () => {
+      mockMemory.getCampaign.mockResolvedValue(null);
+      mockMemory.getState.mockResolvedValue({ activeProduct: 'p1', preferences: {} });
+      mockMemory.getProduct.mockResolvedValue(null);
+
+      const tool = getTool('add_campaign_post');
+      const result = await tool.execute({
+        channel: 'twitter',
+        content: 'Hello world!',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Product not found');
+    });
+
+    it('should use member active campaign when callerTelegramId provided', async () => {
+      const campaign: Campaign = {
+        id: 'member-campaign',
+        productId: 'p1',
+        name: 'Member Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockTeamManager.findMember.mockReturnValue({
+        id: 'member-1',
+        name: 'Test User',
+        preferences: { activeCampaign: 'member-campaign' },
+      });
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('add_campaign_post');
+      const result = await tool.execute({
+        channel: 'twitter',
+        content: 'Member post',
+        callerTelegramId: 123456,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.campaignId).toBe('member-campaign');
+    });
+
+    it('should use existing active campaign for product instead of creating new', async () => {
+      const existingCampaign: Campaign = {
+        id: 'existing-active',
+        productId: 'p1',
+        name: 'Existing Active',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(null);
+      mockMemory.getState.mockResolvedValue({ activeProduct: 'p1', preferences: {} });
+      mockMemory.getProduct.mockResolvedValue({ id: 'p1', name: 'Product' });
+      mockMemory.listCampaigns.mockResolvedValue([existingCampaign]);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('add_campaign_post');
+      const result = await tool.execute({
+        channel: 'twitter',
+        content: 'Post to existing',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.campaignId).toBe('existing-active');
+      expect(result.data?.campaignCreated).toBe(false);
+    });
+
+    it('should use most recently updated campaign when no active campaign exists', async () => {
+      const olderCampaign: Campaign = {
+        id: 'older',
+        productId: 'p1',
+        name: 'Older',
+        status: 'draft',
+        channels: [],
+        posts: [],
+        createdAt: Date.now() - 200000,
+        updatedAt: Date.now() - 200000,
+      };
+      const newerCampaign: Campaign = {
+        id: 'newer',
+        productId: 'p1',
+        name: 'Newer',
+        status: 'paused',
+        channels: [],
+        posts: [],
+        createdAt: Date.now() - 100000,
+        updatedAt: Date.now() - 100000,
+      };
+      mockMemory.getCampaign.mockResolvedValue(null);
+      mockMemory.getState.mockResolvedValue({ activeProduct: 'p1', preferences: {} });
+      mockMemory.getProduct.mockResolvedValue({ id: 'p1', name: 'Product' });
+      mockMemory.listCampaigns.mockResolvedValue([olderCampaign, newerCampaign]); // No active ones
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('add_campaign_post');
+      const result = await tool.execute({
+        channel: 'twitter',
+        content: 'Post to most recent',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.campaignId).toBe('newer');
+    });
   });
 
   describe('update_campaign_post', () => {
@@ -436,6 +823,75 @@ describe('Campaign Tools', () => {
       expect(result.success).toBe(true);
       expect(campaign.posts[0].publishedAt).toBeDefined();
     });
+
+    it('should change status to scheduled when scheduledAt is set on draft post', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { id: 'post1', channel: 'twitter', content: 'Content', status: 'draft' } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('update_campaign_post');
+      const result = await tool.execute({
+        campaignId: 'c1',
+        postId: 'post1',
+        scheduledAt: '2026-04-01T10:00:00Z',
+      });
+
+      expect(result.success).toBe(true);
+      expect(campaign.posts[0].status).toBe('scheduled');
+      expect(campaign.posts[0].scheduledAt).toBeDefined();
+    });
+
+    it('should use active campaign when campaignId not provided', async () => {
+      const campaign: Campaign = {
+        id: 'active-campaign',
+        productId: 'p1',
+        name: 'Active Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { id: 'post1', channel: 'twitter', content: 'Content', status: 'draft' } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getState.mockResolvedValue({ activeCampaign: 'active-campaign', preferences: {} });
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockMemory.saveCampaign.mockResolvedValue(undefined);
+
+      const tool = getTool('update_campaign_post');
+      const result = await tool.execute({
+        postId: 'post1',
+        content: 'Updated via active campaign',
+      });
+
+      expect(result.success).toBe(true);
+      expect(campaign.posts[0].content).toBe('Updated via active campaign');
+    });
+
+    it('should fail if no campaign specified and no active campaign', async () => {
+      mockMemory.getState.mockResolvedValue({ preferences: {} });
+      mockMemory.getCampaign.mockResolvedValue(null);
+
+      const tool = getTool('update_campaign_post');
+      const result = await tool.execute({
+        postId: 'post1',
+        content: 'Update',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No campaign specified');
+    });
   });
 
   describe('set_active_campaign', () => {
@@ -470,6 +926,68 @@ describe('Campaign Tools', () => {
       const result = await tool.execute({ campaignId: 'nonexistent' });
 
       expect(result.success).toBe(false);
+    });
+
+    it('should set active campaign per-member when callerTelegramId provided', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockTeamManager.findMember.mockReturnValue({
+        id: 'member-1',
+        name: 'Test User',
+        preferences: { theme: 'dark' },
+      });
+      mockTeamManager.updateMember.mockResolvedValue(undefined);
+
+      const tool = getTool('set_active_campaign');
+      const result = await tool.execute({ campaignId: 'c1', callerTelegramId: 123456 });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('for Test User');
+      expect(mockTeamManager.updateMember).toHaveBeenCalledWith(
+        'member-1',
+        { preferences: { theme: 'dark', activeCampaign: 'c1' } }
+      );
+    });
+
+    it('should clear active campaign globally', async () => {
+      mockMemory.getState.mockResolvedValue({ activeCampaign: 'c1', preferences: {} });
+      mockMemory.saveState.mockResolvedValue(undefined);
+
+      const tool = getTool('set_active_campaign');
+      const result = await tool.execute({ campaignId: null as any });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Active campaign cleared');
+      expect(mockMemory.saveState).toHaveBeenCalledWith(
+        expect.objectContaining({ activeCampaign: undefined })
+      );
+    });
+
+    it('should clear active campaign per-member', async () => {
+      mockTeamManager.findMember.mockReturnValue({
+        id: 'member-1',
+        name: 'Test User',
+        preferences: { activeCampaign: 'c1' },
+      });
+      mockTeamManager.updateMember.mockResolvedValue(undefined);
+
+      const tool = getTool('set_active_campaign');
+      const result = await tool.execute({ campaignId: null as any, callerTelegramId: 123456 });
+
+      expect(result.success).toBe(true);
+      expect(mockTeamManager.updateMember).toHaveBeenCalledWith(
+        'member-1',
+        { preferences: { activeCampaign: undefined } }
+      );
     });
   });
 
@@ -528,6 +1046,131 @@ describe('Campaign Tools', () => {
       expect(result.success).toBe(true);
       expect(result.data?.costs).toBeDefined();
       expect(result.data?.costs.totalUsd).toBe(0.05);
+    });
+
+    it('should fail if campaign not found', async () => {
+      mockMemory.getCampaign.mockResolvedValue(null);
+
+      const tool = getTool('get_campaign_metrics');
+      const result = await tool.execute({ campaignId: 'nonexistent' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Campaign not found');
+    });
+
+    it('should handle cost tracker errors gracefully', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockRejectedValue(new Error('Cost tracker not initialized'));
+
+      const tool = getTool('get_campaign_metrics');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.costs).toBeNull(); // Should gracefully handle error
+    });
+
+    it('should aggregate all metric types including shares and comments', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { 
+            id: 'p1', 
+            channel: 'twitter', 
+            content: 'Tweet', 
+            status: 'published', 
+            metrics: { impressions: 100, clicks: 20, likes: 10, shares: 5, comments: 3 } 
+          } as CampaignPost,
+          { 
+            id: 'p2', 
+            channel: 'twitter', 
+            content: 'Tweet 2', 
+            status: 'published', 
+            metrics: { impressions: 50, clicks: 10, likes: 5, shares: 2, comments: 1 } 
+          } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockResolvedValue({ totalUsd: 0, count: 0 });
+
+      const tool = getTool('get_campaign_metrics');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.totals.impressions).toBe(150);
+      expect(result.data?.totals.clicks).toBe(30);
+      expect(result.data?.totals.shares).toBe(7);
+      expect(result.data?.totals.comments).toBe(4);
+      expect(result.data?.byChannel.twitter.impressions).toBe(150);
+    });
+
+    it('should calculate engagement rate', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { 
+            id: 'p1', 
+            channel: 'twitter', 
+            content: 'Tweet', 
+            status: 'published', 
+            metrics: { impressions: 1000, likes: 50, shares: 20, comments: 30 } 
+          } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockResolvedValue({ totalUsd: 0, count: 0 });
+
+      const tool = getTool('get_campaign_metrics');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.engagementRate).toBe('10.00%'); // (50+20+30)/1000 * 100
+    });
+
+    it('should count failed and scheduled posts', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: ['twitter'],
+        posts: [
+          { id: 'p1', channel: 'twitter', content: 'Failed', status: 'failed' } as CampaignPost,
+          { id: 'p2', channel: 'twitter', content: 'Scheduled', status: 'scheduled' } as CampaignPost,
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockResolvedValue({ totalUsd: 0, count: 0 });
+
+      const tool = getTool('get_campaign_metrics');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.posts.failed).toBe(1);
+      expect(result.data?.posts.scheduled).toBe(1);
     });
   });
 
@@ -590,6 +1233,61 @@ describe('Campaign Tools', () => {
       const result = await tool.execute({ campaignId: 'nonexistent' });
 
       expect(result.success).toBe(false);
+    });
+
+    it('should handle cost tracker errors', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockRejectedValue(new Error('Database connection error'));
+
+      const tool = getTool('get_campaign_costs');
+      const result = await tool.execute({ campaignId: 'c1' });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to get costs');
+    });
+
+    it('should pass date range parameters to cost tracker', async () => {
+      const campaign: Campaign = {
+        id: 'c1',
+        productId: 'p1',
+        name: 'Campaign',
+        status: 'active',
+        channels: [],
+        posts: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      mockMemory.getCampaign.mockResolvedValue(campaign);
+      mockCostTracker.summarize.mockResolvedValue({
+        totalUsd: 0.05,
+        count: 2,
+        from: '2026-01-01T00:00:00Z',
+        to: '2026-01-31T00:00:00Z',
+      });
+
+      const tool = getTool('get_campaign_costs');
+      const result = await tool.execute({
+        campaignId: 'c1',
+        from: 'this-month',
+        to: '2026-01-31T00:00:00Z',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockCostTracker.summarize).toHaveBeenCalledWith({
+        campaignId: 'c1',
+        from: 'this-month',
+        to: '2026-01-31T00:00:00Z',
+      });
     });
   });
 

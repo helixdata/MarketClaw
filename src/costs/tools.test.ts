@@ -183,6 +183,44 @@ describe('getCostSummaryTool', () => {
     expect(result.data).toEqual(mockSummary);
   });
 
+  it('should include byUser breakdown when present', async () => {
+    const mockSummary: CostSummary = {
+      totalUsd: 0.03,
+      count: 2,
+      byTool: { generate_image: 0.03 },
+      byUser: { user1: 0.02, user2: 0.01 },
+      from: '2024-01-01',
+      to: '2024-01-31',
+    };
+    mockTracker.summarize.mockResolvedValue(mockSummary);
+
+    const result = await getCostSummaryTool.execute({});
+
+    expect(result.success).toBe(true);
+    expect(result.data.byUser).toEqual({ user1: 0.02, user2: 0.01 });
+  });
+
+  it('should handle summary with empty breakdowns', async () => {
+    const mockSummary: CostSummary = {
+      totalUsd: 0.01,
+      count: 1,
+      byTool: {},
+      byAgent: {},
+      byProvider: {},
+      byProduct: {},
+      from: '2024-01-01',
+      to: '2024-01-31',
+    };
+    mockTracker.summarize.mockResolvedValue(mockSummary);
+
+    const result = await getCostSummaryTool.execute({});
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('💰 Total: $0.0100');
+    // Should not include breakdown sections when empty
+    expect(result.message).not.toContain('By Tool:');
+  });
+
   it('should pass filters to summarize', async () => {
     mockTracker.summarize.mockResolvedValue({
       totalUsd: 0,

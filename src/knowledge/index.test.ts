@@ -714,6 +714,18 @@ Content under header 3`;
 
     expect(mockState.upsertItem.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('should further split very large chunks', async () => {
+    // Create a text with a single header followed by content that's > 2 * CHUNK_SIZE
+    const veryLongSection = '# Header 1\n' + 'B'.repeat(6000); // 6000 chars > 2 * ~2000
+
+    vi.mocked(readFile).mockResolvedValue(veryLongSection);
+
+    await pk.indexFile('test', 'large-chunks.md');
+
+    // Should have been split into multiple sub-chunks
+    expect(mockState.upsertItem.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('getKnowledgeType internal logic', () => {

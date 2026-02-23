@@ -674,6 +674,30 @@ describe('Scheduler', () => {
       expect(Scheduler.parseToTimestamp('IN 20 MINUTES')).toBeDefined();
       expect(Scheduler.parseToTimestamp('At 3 PM')).toBeDefined();
     });
+
+    it('should parse "tonight at HH:MM"', () => {
+      const result = Scheduler.parseToTimestamp('tonight at 10:30');
+      expect(result).toBeDefined();
+      const date = new Date(result!);
+      // Should assume PM for "tonight" - 10:30 becomes 22:30
+      expect(date.getHours()).toBe(22);
+      expect(date.getMinutes()).toBe(30);
+    });
+
+    it('should parse ISO timestamp', () => {
+      const isoTime = '2026-03-15T14:30:00.000Z';
+      const result = Scheduler.parseToTimestamp(isoTime);
+      expect(result).toBeDefined();
+      expect(result).toBe(Date.parse(isoTime));
+    });
+
+    it('should handle "at HH am"', () => {
+      const result = Scheduler.parseToTimestamp('at 9 am');
+      expect(result).toBeDefined();
+      const date = new Date(result!);
+      expect(date.getHours()).toBe(9);
+      expect(date.getMinutes()).toBe(0);
+    });
   });
 
   describe('isOneShot', () => {
