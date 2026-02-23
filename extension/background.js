@@ -32,11 +32,12 @@ const PLATFORMS = {
 function connect() {
   try {
     ws = new WebSocket(WS_URL);
+    updateBadge('...', '#f59e0b'); // Yellow while connecting
     
     ws.onopen = () => {
       console.log('[MarketClaw] Connected to server');
       isConnected = true;
-      updateBadge('ON', '#22c55e');
+      updateBadge('✓', '#22c55e'); // Green checkmark when connected
       
       // Send handshake
       ws.send(JSON.stringify({
@@ -69,7 +70,7 @@ function connect() {
     ws.onclose = () => {
       console.log('[MarketClaw] Disconnected');
       isConnected = false;
-      updateBadge('OFF', '#ef4444');
+      updateBadge('', '#ef4444'); // Red dot, no text when disconnected
       
       // Reconnect after delay
       setTimeout(connect, RECONNECT_INTERVAL);
@@ -77,10 +78,12 @@ function connect() {
     
     ws.onerror = (err) => {
       console.error('[MarketClaw] WebSocket error:', err);
+      updateBadge('!', '#ef4444'); // Red exclamation on error
     };
     
   } catch (err) {
     console.error('[MarketClaw] Connection error:', err);
+    updateBadge('', '#ef4444');
     setTimeout(connect, RECONNECT_INTERVAL);
   }
 }
