@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .logo {
+      font-size: 28px;
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: #252538;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+    
+    .status-dot.connected {
+      background: #22c55e;
+    }
+    
+    .status-text {
+      flex: 1;
+    }
+    
+    .section {
+      margin-bottom: 16px;
+    }
+    
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    
+    .platform {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #252538;
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+    
+    .platform-icon {
+      font-size: 18px;
+    }
+    
+    .platform-name {
+      flex: 1;
+    }
+    
+    .platform-status {
+      font-size: 12px;
+      color: #888;
+    }
+    
+    textarea {
+      width: 100%;
+      height: 80px;
+      padding: 10px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #252538;
+      color: #eee;
+      font-family: inherit;
+      font-size: 13px;
+      resize: none;
+      margin-bottom: 8px;
+    }
+    
+    textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    
+    select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #252538;
+      color: #eee;
+      font-family: inherit;
+      margin-bottom: 8px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #3b82f6;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    button:disabled {
+      background: #333;
+      cursor: not-allowed;
+    }
+    
+    .footer {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #333;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+    
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="logo">🦀</span>
+    <span class="title">MarketClaw</span>
+  </div>
+  
+  <div class="status">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text" id="statusText">Connecting...</div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">Supported Platforms</div>
+    <div class="platform">
+      <span class="platform-icon">🐦</span>
+      <span class="platform-name">Twitter / X</span>
+      <span class="platform-status">Ready</span>
+    </div>
+    <div class="platform">
+      <span class="platform-icon">💼</span>
+      <span class="platform-name">LinkedIn</span>
+      <span class="platform-status">Ready</span>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">Quick Post</div>
+    <select id="platformSelect">
+      <option value="twitter">Twitter / X</option>
+      <option value="linkedin">LinkedIn</option>
+    </select>
+    <textarea id="postContent" placeholder="What's happening?"></textarea>
+    <button id="postButton" disabled>Post</button>
+  </div>
+  
+  <div class="footer">
+    Listening on <a href="#">ws://localhost:7890</a>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
