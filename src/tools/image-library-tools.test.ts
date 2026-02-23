@@ -574,6 +574,34 @@ describe('Image Library Tools', () => {
       expect(result.data.dimensions).toEqual({ width: 1280, height: 720 });
     });
 
+    it('should return image name when no local path exists', async () => {
+      vi.mocked(imageLibrary.getImage).mockResolvedValue({
+        id: 'img_remote',
+        productId: 'proofping',
+        filename: 'remote.png',
+        path: '', // No local path
+        url: 'https://example.com/remote.png',
+        name: 'Remote Only Image',
+        description: 'An image without local path',
+        tags: [],
+        type: 'hero',
+        mimeType: 'image/png',
+        size: 1024,
+        dimensions: { width: 800, height: 600 },
+        uploadedAt: 1700000000000,
+        updatedAt: 1700000000000,
+      });
+
+      const result = await getProductImageTool.execute({
+        imageId: 'img_remote',
+        productId: 'proofping',
+      });
+
+      expect(result.success).toBe(true);
+      // Falls back to image name when no path
+      expect(result.message).toBe('Image: Remote Only Image');
+    });
+
     it('should fail when image not found', async () => {
       vi.mocked(imageLibrary.getImage).mockResolvedValue(null);
 
