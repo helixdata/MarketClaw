@@ -15,6 +15,15 @@ function generateTaskId(): string {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Options for spawning a task
+ */
+interface SpawnOptions {
+  context?: Record<string, unknown>;
+  notifyOnComplete?: boolean;
+  notifyTarget?: string;
+}
+
 class SubAgentRegistry extends EventEmitter {
   private agents: Map<string, SubAgentState> = new Map();
   private taskQueue: AgentTask[] = [];
@@ -126,13 +135,27 @@ class SubAgentRegistry extends EventEmitter {
   /**
    * Spawn a task for a sub-agent
    */
-  async spawn(agentId: string, prompt: string, context?: Record<string, unknown>): Promise<AgentTask> {
+  async spawn(agentId: string, prompt: string, contextOrOptions?: Record<string, unknown> | SpawnOptions): Promise<AgentTask> {
     const agent = this.agents.get(agentId);
     if (!agent) {
       throw new Error(`Sub-agent not found: ${agentId}`);
     }
     if (!agent.config.enabled) {
       throw new Error(`Sub-agent is disabled: ${agentId}`);
+    }
+
+    // Handle both old (context only) and new (options object) signatures
+    let context: Record<string, unknown> | undefined;
+    let notifyOnComplete: boolean | undefined;
+    let notifyTarget: string | undefined;
+    
+    if (contextOrOptions && ('notifyOnComplete' in contextOrOptions || 'notifyTarget' in contextOrOptions)) {
+      const opts = contextOrOptions as SpawnOptions;
+      context = opts.context;
+      notifyOnComplete = opts.notifyOnComplete;
+      notifyTarget = opts.notifyTarget;
+    } else {
+      context = contextOrOptions as Record<string, unknown> | undefined;
     }
 
     const task: AgentTask = {
@@ -142,6 +165,8 @@ class SubAgentRegistry extends EventEmitter {
       context,
       status: 'pending',
       createdAt: new Date(),
+      notifyOnComplete,
+      notifyTarget,
     };
 
     agent.activeTasks.push(task);

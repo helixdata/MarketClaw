@@ -254,7 +254,10 @@ describe('delegate_task', () => {
     expect(result.message).toContain('completed');
     expect(result.data?.taskId).toBe('task_456');
     expect(result.data?.result).toBe('Tweet posted!');
-    expect(subAgentRegistry.spawn).toHaveBeenCalledWith('twitter', 'Post a tweet about AI', undefined);
+    expect(subAgentRegistry.spawn).toHaveBeenCalledWith('twitter', 'Post a tweet about AI', {
+      context: undefined,
+      notifyOnComplete: false,
+    });
     expect(subAgentRegistry.waitForTask).toHaveBeenCalledWith('task_456', 120000);
   });
 
@@ -310,9 +313,11 @@ describe('delegate_task', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.message).toContain('Task delegated');
+    expect(result.message).toContain('Async Agent');
+    expect(result.message).toContain("I'll let you know when it's done");
     expect(result.data?.taskId).toBe('task_async');
     expect(result.data?.agentId).toBe('async');
+    expect(result.data?.async).toBe(true);
     expect(subAgentRegistry.waitForTask).not.toHaveBeenCalled();
   });
 
@@ -336,7 +341,10 @@ describe('delegate_task', () => {
     expect(subAgentRegistry.spawn).toHaveBeenCalledWith(
       'context-aware',
       'Task with context',
-      { key: 'value', nested: { a: 1 } }
+      {
+        context: { key: 'value', nested: { a: 1 } },
+        notifyOnComplete: false,
+      }
     );
   });
 });

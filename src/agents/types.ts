@@ -67,6 +67,10 @@ export interface AgentTask {
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
+  /** If true, send notification when task completes (for async tasks) */
+  notifyOnComplete?: boolean;
+  /** User/chat to notify (for async tasks) */
+  notifyTarget?: string;
 }
 
 /**

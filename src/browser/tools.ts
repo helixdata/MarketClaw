@@ -472,12 +472,11 @@ export const redditPostTool: Tool = {
       return { success: false, message: 'Browser extension not connected.' };
     }
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action: params.action || 'post',
       platform: 'reddit',
       content: params.content,
       subreddit: params.subreddit,
       title: params.title,
-      action: params.action || 'post',
     });
     return {
       success: result.success,
@@ -526,12 +525,11 @@ export const hnSubmitTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action,
       platform: 'hackernews',
       content: params.content || '',
       title: params.title,
       url: params.url,
-      action,
     });
     return {
       success: result.success,
@@ -571,10 +569,9 @@ export const phInteractTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action: params.action,
       platform: 'producthunt',
       content: params.content || '',
-      action: params.action,
     });
     return {
       success: result.success,
@@ -618,10 +615,9 @@ export const instagramInteractTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action: params.action,
       platform: 'instagram',
       content: params.content,
-      action: params.action,
       username: params.username,
     });
     return {
@@ -667,10 +663,9 @@ export const facebookPostTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action,
       platform: 'facebook',
       content: params.content || '',
-      action,
     }, params.profile);
     return {
       success: result.success,
@@ -715,10 +710,9 @@ export const threadsPostTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action,
       platform: 'threads',
       content: params.content || '',
-      action,
     }, params.profile);
     return {
       success: result.success,
@@ -763,10 +757,9 @@ export const blueskyPostTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action,
       platform: 'bluesky',
       content: params.content || '',
-      action,
     }, params.profile);
     return {
       success: result.success,
@@ -811,10 +804,9 @@ export const youtubeInteractTool: Tool = {
     }
     
     const result = await extensionBridge.sendCommand({
-      action: 'post',
+      action,
       platform: 'youtube',
       content: params.content || '',
-      action,
     }, params.profile);
     return {
       success: result.success,

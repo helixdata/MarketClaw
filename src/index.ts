@@ -533,6 +533,38 @@ export async function startAgent(): Promise<void> {
   await scheduler.load();
   logger.info({ jobs: scheduler.listJobs().length }, 'Scheduler loaded');
 
+  // Handle async sub-agent task completion notifications
+  subAgentRegistry.on('task:complete', async (task) => {
+    // Only notify for tasks that requested notification (async tasks)
+    if (!task.notifyOnComplete) return;
+    
+    const agent = subAgentRegistry.get(task.agentId);
+    if (!agent) return;
+    
+    const { identity } = agent.config;
+    const notifyChannel = enabledChannels[0];
+    const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+    
+    const resultPreview = task.result 
+      ? task.result.slice(0, 2000) + (task.result.length > 2000 ? '...' : '')
+      : 'No result';
+    
+    const statusEmoji = task.status === 'completed' ? '✅' : '❌';
+    const message = task.status === 'completed'
+      ? `${statusEmoji} ${identity.emoji} **${identity.name}** finished!\n\n${resultPreview}`
+      : `${statusEmoji} ${identity.emoji} **${identity.name}** failed: ${task.error || 'Unknown error'}`;
+    
+    for (const userId of adminUsers) {
+      try {
+        await notifyChannel.send(String(userId), { text: message });
+      } catch (err) {
+        logger.error({ err, userId, taskId: task.id }, 'Failed to send task completion notification');
+      }
+    }
+    
+    logger.info({ taskId: task.id, agentId: task.agentId, status: task.status }, 'Sent task completion notification');
+  });
+
   // Start all enabled channels
   await channelRegistry.startAll();
   
