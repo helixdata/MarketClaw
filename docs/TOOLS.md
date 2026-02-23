@@ -180,6 +180,72 @@ Calendar tools support product-specific calendars. See [CALENDAR.md](./CALENDAR.
 | `get_product_config` | Get product config |
 | `set_product_config` | Set product config value |
 
+### 🌐 Browser Automation Tools
+
+Browser automation allows posting to social media via the MarketClaw Chrome extension. No API costs — posts like a human using your logged-in sessions.
+
+**Requires:** MarketClaw Chrome extension installed and connected.
+
+#### Generic Tools
+
+| Tool | Description |
+|------|-------------|
+| `browser_post` | Post to any platform (10 supported) |
+| `browser_status` | Check extension connection and profiles |
+| `browser_navigate` | Open a URL in browser |
+| `browser_click` | Click element by CSS selector |
+| `browser_type` | Type text into element |
+| `browser_find` | Find elements matching selector |
+| `browser_wait` | Wait for element to appear |
+| `browser_page_info` | Get page URL, title, dimensions |
+| `browser_scroll` | Scroll page |
+| `browser_get_text` | Get text content of element |
+
+#### Platform-Specific Tools
+
+| Tool | Platform | Actions |
+|------|----------|---------|
+| `reddit_post` | Reddit | `post`, `comment` |
+| `hn_submit` | Hacker News | `submit`, `comment`, `upvote` |
+| `ph_interact` | Product Hunt | `upvote`, `comment`, `reply` |
+| `instagram_interact` | Instagram | `comment`, `dm` |
+| `facebook_post` | Facebook | `post`, `comment`, `like` |
+| `threads_post` | Threads | `post`, `reply`, `like` |
+| `bluesky_post` | Bluesky | `post`, `reply`, `like`, `repost` |
+| `youtube_interact` | YouTube | `comment`, `reply`, `like`, `subscribe` |
+
+#### Supported Platforms
+
+| Platform | Via browser_post | Dedicated Tool |
+|----------|------------------|----------------|
+| Twitter/X | ✅ | — |
+| LinkedIn | ✅ | — |
+| Reddit | ✅ | `reddit_post` |
+| Instagram | ✅ | `instagram_interact` |
+| Hacker News | ✅ | `hn_submit` |
+| Product Hunt | ✅ | `ph_interact` |
+| Facebook | ✅ | `facebook_post` |
+| Threads | ✅ | `threads_post` |
+| Bluesky | ✅ | `bluesky_post` |
+| YouTube | ✅ | `youtube_interact` |
+
+#### Profile Support
+
+Target specific Chrome profiles for multi-account management:
+
+```
+browser_post({ platform: 'twitter', content: 'Hello!', profile: 'Work' })
+```
+
+**Examples:**
+- "Post to Twitter: Hello world!"
+- "Comment on this Reddit post with 'Great insight!'"
+- "Upvote this Product Hunt launch"
+- "Like this YouTube video"
+- "Post to Bluesky from my personal account"
+
+See [extension/README.md](../extension/README.md) for full documentation.
+
 ---
 
 ## Creating a Tool

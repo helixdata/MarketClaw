@@ -16,6 +16,7 @@ import { initializeAgents, agentTools, subAgentRegistry } from './agents/index.j
 import { teamManager, teamTools, getToolPermission } from './team/index.js';
 import { approvalManager, approvalTools } from './approvals/index.js';
 import { Message, MessageContent, TextContent, ImageContent } from './providers/types.js';
+import { extensionBridge, browserTools } from './browser/index.js';
 import pino from 'pino';
 
 const logger = pino({
@@ -373,6 +374,21 @@ export async function startAgent(): Promise<void> {
   // Initialize approval workflow
   await approvalManager.init();
   toolRegistry.registerAll(approvalTools, { category: 'utility' });
+
+  // Initialize browser extension bridge
+  toolRegistry.registerAll(browserTools, { category: 'utility' });
+  try {
+    await extensionBridge.start();
+    extensionBridge.on('connect', (client) => {
+      logger.info({ version: client.version, capabilities: client.capabilities }, 'Browser extension connected');
+    });
+    extensionBridge.on('disconnect', () => {
+      logger.info('Browser extension disconnected');
+    });
+    logger.info({ port: 7890 }, 'Browser extension bridge started');
+  } catch (err) {
+    logger.warn({ err }, 'Browser extension bridge failed to start (non-fatal)');
+  }
   
   // Set up approval notifications
   approvalManager.on('approval:requested', async (request) => {
@@ -527,6 +543,7 @@ export async function startAgent(): Promise<void> {
   const shutdown = async () => {
     logger.info('Shutting down...');
     scheduler.stopAll();
+    await extensionBridge.stop();
     await channelRegistry.stopAll();
     process.exit(0);
   };

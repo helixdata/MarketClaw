@@ -16,6 +16,39 @@ import { homedir } from 'os';
 
 const logger = pino({ name: 'telegram' });
 
+// Telegram typing indicator expires after ~5 seconds
+// Refresh every 4 seconds to keep it alive
+const TYPING_REFRESH_INTERVAL = 4000;
+
+/**
+ * Keep typing indicator alive during long operations
+ * Returns a stop function to call when done
+ */
+function startTypingIndicator(ctx: any): () => void {
+  let stopped = false;
+  
+  const sendTyping = async () => {
+    if (stopped) return;
+    try {
+      await ctx.sendChatAction('typing');
+    } catch (err) {
+      // Ignore errors (e.g., if chat was deleted)
+    }
+  };
+  
+  // Send immediately
+  sendTyping();
+  
+  // Then refresh every 4 seconds
+  const interval = setInterval(sendTyping, TYPING_REFRESH_INTERVAL);
+  
+  // Return stop function
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+  };
+}
+
 export interface TelegramConfig extends ChannelConfig {
   botToken: string;
   allowedUsers?: number[];
@@ -285,17 +318,21 @@ export class TelegramChannel implements Channel {
 
       logger.info({ userId: message.userId, text: message.text.slice(0, 50) }, 'Received message');
 
-      try {
-        await ctx.sendChatAction('typing');
+      // Keep typing indicator alive during processing
+      const stopTyping = startTypingIndicator(ctx);
 
+      try {
         // Get message handler from registry
         const handler = channelRegistry.getMessageHandler();
         if (!handler) {
+          stopTyping();
           await ctx.reply('⚠️ Agent not configured.');
           return;
         }
 
         const response = await handler(this, message);
+        
+        stopTyping();
         
         if (response) {
           await this.send(message.userId, {
@@ -304,6 +341,7 @@ export class TelegramChannel implements Channel {
           });
         }
       } catch (error) {
+        stopTyping();
         logger.error({ error, userId: message.userId }, 'Error processing message');
         await ctx.reply('❌ Error processing your message. Please try again.');
       }
@@ -316,9 +354,10 @@ export class TelegramChannel implements Channel {
       const photo = photos[photos.length - 1];
       const caption = ctx.message.caption || '';
 
-      try {
-        await ctx.sendChatAction('typing');
+      // Keep typing indicator alive during processing
+      const stopTyping = startTypingIndicator(ctx);
 
+      try {
         // Download the image
         const images = await this.downloadTelegramImages(ctx, [photo.file_id]);
 
@@ -340,11 +379,15 @@ export class TelegramChannel implements Channel {
 
         const handler = channelRegistry.getMessageHandler();
         if (!handler) {
+          stopTyping();
           await ctx.reply('⚠️ Agent not configured.');
           return;
         }
 
         const response = await handler(this, message);
+        
+        stopTyping();
+        
         if (response) {
           await this.send(message.userId, {
             ...response,
@@ -352,6 +395,7 @@ export class TelegramChannel implements Channel {
           });
         }
       } catch (error) {
+        stopTyping();
         logger.error({ error, userId: ctx.from.id }, 'Error processing photo message');
         await ctx.reply('❌ Error processing your image. Please try again.');
       }
@@ -364,9 +408,10 @@ export class TelegramChannel implements Channel {
       const filename = doc.file_name || 'document';
       const caption = ctx.message.caption || '';
 
-      try {
-        await ctx.sendChatAction('typing');
+      // Keep typing indicator alive during processing
+      const stopTyping = startTypingIndicator(ctx);
 
+      try {
         let images: ChannelImage[] = [];
         const documents: ChannelDocument[] = [];
 
@@ -383,6 +428,7 @@ export class TelegramChannel implements Channel {
         }
         else {
           // Unsupported file type
+          stopTyping();
           await ctx.reply(`⚠️ Unsupported file type: ${mimeType || 'unknown'}. I can read PDF, Word (.docx/.doc), and text files.`);
           return;
         }
@@ -425,11 +471,15 @@ export class TelegramChannel implements Channel {
 
         const handler = channelRegistry.getMessageHandler();
         if (!handler) {
+          stopTyping();
           await ctx.reply('⚠️ Agent not configured.');
           return;
         }
 
         const response = await handler(this, message);
+        
+        stopTyping();
+        
         if (response) {
           await this.send(message.userId, {
             ...response,
@@ -437,6 +487,7 @@ export class TelegramChannel implements Channel {
           });
         }
       } catch (error) {
+        stopTyping();
         logger.error({ error, userId: ctx.from.id }, 'Error processing document');
         await ctx.reply('❌ Error processing your file. Please try again.');
       }

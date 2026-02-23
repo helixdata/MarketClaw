@@ -84,6 +84,7 @@ Use any AI provider:
 - **Web search & research** — Search the web, extract content, compile research reports
 - **Email** — Outreach via Resend, monitor inbox
 - **Social** — Twitter, LinkedIn, Product Hunt (via skills)
+- **Browser automation** — Post to 10 platforms via Chrome extension (no API costs!)
 - **Images** — Generate with DALL-E, analyze with vision
 - **Leads** — Simple CRM
 - **Calendar** — Google Calendar integration for event management
@@ -250,6 +251,43 @@ Bot: Here's my analysis:
 
 Works across Telegram, Discord, and Slack with Claude, GPT-4o, and Gemini.
 
+### 🌐 Browser Automation
+
+Post to social media via Chrome extension — no API costs, posts like a human:
+
+| Platform | Actions |
+|----------|---------|
+| 🐦 Twitter/X | Post |
+| 💼 LinkedIn | Post |
+| 🤖 Reddit | Post, comment |
+| 📸 Instagram | Comment, DM |
+| 🔶 Hacker News | Submit, comment, upvote |
+| 🚀 Product Hunt | Upvote, comment |
+| 📘 Facebook | Post, comment, like |
+| 🧵 Threads | Post, reply, like |
+| 🦋 Bluesky | Post, reply, like, repost |
+| ▶️ YouTube | Comment, like, subscribe |
+
+```
+You: "Post to Twitter: Just shipped a new feature! 🚀"
+Bot: ✅ Posted to Twitter successfully
+
+You: "Upvote this Product Hunt launch"
+Bot: ✅ Upvoted on Product Hunt
+
+You: "Comment on this HN post: Great insights!"
+Bot: ✅ Comment posted to Hacker News
+```
+
+**Multi-account support:** Name your Chrome profiles (Work, Personal, Client1) and target specific accounts:
+
+```
+You: "Post to Twitter from my work account: Company announcement"
+Bot: ✅ Posted to Twitter (Work profile)
+```
+
+See [extension/README.md](./extension/README.md) for setup and full documentation.
+
 ### 💰 Cost Tracking
 
 Monitor and control API spending:
@@ -337,6 +375,9 @@ src/
 │   ├── discord.ts
 │   ├── slack.ts
 │   └── cli.ts
+├── browser/           # Browser automation
+│   ├── extension-bridge.ts  # WebSocket server
+│   └── tools.ts       # 18 browser tools
 ├── agents/            # Sub-agent system
 │   ├── specialists.ts # Built-in specialists
 │   ├── registry.ts    # Agent management
@@ -356,6 +397,12 @@ src/
 ├── memory/            # Persistent state
 ├── knowledge/         # RAG/embeddings
 └── scheduler/         # Cron jobs
+
+extension/             # Chrome extension
+├── manifest.json      # Extension manifest (v0.4.0)
+├── background.js      # WebSocket client
+├── popup.html/js      # Extension UI
+└── content-scripts/   # Platform automation (10 platforms)
 ```
 
 ---
@@ -392,6 +439,7 @@ marketclaw config
 - [Setup Guide](./docs/SETUP.md) — Detailed installation & configuration
 - [Channels](./docs/CHANNELS.md) — Telegram, Discord, Slack, CLI
 - [Providers](./docs/PROVIDERS.md) — Configure AI providers
+- [Browser Automation](./docs/BROWSER-AUTOMATION.md) — Setup guide for Chrome extension
 - [Brand Identity](./docs/BRAND.md) — Colors, voice, taglines, typography
 - [Image Library](./docs/IMAGE-LIBRARY.md) — Store & search product images
 - [File Attachments](./docs/FILE-ATTACHMENTS.md) — Generate PDF & PowerPoint files
@@ -429,6 +477,7 @@ marketclaw config
 - [x] Vision/image support
 - [x] Web search & research tools
 - [x] Google Calendar integration
+- [x] Browser automation (10 platforms via Chrome extension)
 - [ ] Calendar-campaign sync (auto-create events for scheduled posts)
 - [ ] Notion integration
 - [ ] Google Ads integration

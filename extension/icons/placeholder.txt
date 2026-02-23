@@ -1,0 +1,6 @@
+Replace these with actual icon files:
+- icon16.png (16x16)
+- icon48.png (48x48)  
+- icon128.png (128x128)
+
+Use a 🦀 crab emoji or MarketClaw logo.
