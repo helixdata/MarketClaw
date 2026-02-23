@@ -39,3 +39,4 @@ temp/
 
 # OS files
 Thumbs.db
+.claude/
