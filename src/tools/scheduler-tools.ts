@@ -9,21 +9,53 @@ import { scheduler, Scheduler } from '../scheduler/index.js';
 // ============ Schedule Reminder ============
 export const scheduleReminderTool: Tool = {
   name: 'schedule_reminder',
-  description: 'Set a reminder that will be sent via Telegram',
+  description: 'Set a reminder that will be sent via Telegram. Supports one-shot ("in 20 minutes", "at 3pm") and recurring ("every day at 9am").',
   parameters: {
     type: 'object',
     properties: {
       message: { type: 'string', description: 'Reminder message' },
       when: { 
         type: 'string', 
-        description: 'When to remind (e.g., "at 14:00", "every Monday", "in 30 minutes")' 
+        description: 'When to remind. One-shot: "in 20 minutes", "at 3pm", "tomorrow at 9am". Recurring: "every hour", "every day at 9am".' 
       },
-      recurring: { type: 'boolean', description: 'Whether this repeats (default: based on schedule)' },
     },
     required: ['message', 'when'],
   },
 
   async execute(params): Promise<ToolResult> {
+    // Check if it's a one-shot schedule
+    if (Scheduler.isOneShot(params.when)) {
+      const executeAt = Scheduler.parseToTimestamp(params.when);
+      
+      if (!executeAt) {
+        return {
+          success: false,
+          message: `Could not parse schedule "${params.when}".`,
+        };
+      }
+
+      const job = await scheduler.addJob({
+        name: 'Reminder',
+        description: params.message.slice(0, 100),
+        executeAt,
+        oneShot: true,
+        deleteAfterRun: true,
+        type: 'reminder',
+        enabled: true,
+        payload: {
+          content: params.message,
+        },
+      });
+
+      const scheduledTime = new Date(executeAt).toLocaleString();
+      return {
+        success: true,
+        message: `⏰ Reminder set for ${scheduledTime}`,
+        data: { jobId: job.id, executeAt, oneShot: true },
+      };
+    }
+
+    // Recurring schedule
     const cronExpression = Scheduler.parseToCron(params.when);
     
     if (!cronExpression) {
@@ -41,14 +73,13 @@ export const scheduleReminderTool: Tool = {
       enabled: true,
       payload: {
         content: params.message,
-        metadata: { recurring: params.recurring ?? false },
       },
     });
 
     return {
       success: true,
-      message: `Reminder set for ${params.when}. Job ID: ${job.id}`,
-      data: { jobId: job.id, schedule: cronExpression },
+      message: `🔁 Recurring reminder set (${params.when}). Job ID: ${job.id}`,
+      data: { jobId: job.id, schedule: cronExpression, recurring: true },
     };
   },
 };
@@ -87,8 +118,12 @@ export const listJobsTool: Tool = {
       id: j.id,
       name: j.name,
       type: j.type,
-      schedule: j.cronExpression,
+      schedule: j.oneShot 
+        ? `one-shot at ${new Date(j.executeAt!).toLocaleString()}`
+        : j.cronExpression,
+      oneShot: j.oneShot || false,
       enabled: j.enabled,
+      nextRun: j.nextRun ? new Date(j.nextRun).toLocaleString() : null,
       lastRun: j.lastRun ? new Date(j.lastRun).toISOString() : null,
       runCount: j.runCount,
       content: j.payload.content?.slice(0, 50),
@@ -189,18 +224,25 @@ export const runJobNowTool: Tool = {
 // ============ Schedule Automated Task ============
 export const scheduleTaskTool: Tool = {
   name: 'schedule_task',
-  description: 'Schedule any automated task for the AI to execute on a schedule. Use this for EVERYTHING: social media posts, emails, reports, inbox checks, reminders with actions, etc. The AI will use tools to complete the task. Examples: "Post to Twitter: [content]", "Send daily summary email to brett@example.com", "Check inbox and respond to leads".',
+  description: `Schedule any automated task for the AI to execute. Supports both one-shot ("in 20 minutes", "at 3pm", "tonight at 2am") and recurring ("every hour", "every day at 9am").
+
+Use this for: social media posts, emails, reports, research, inbox checks, etc. The AI will use tools to complete the task.
+
+Examples:
+- "in 2 hours" → one-shot, runs once then auto-deletes
+- "tonight at 2am" → one-shot overnight task
+- "every day at 9am" → recurring daily`,
   parameters: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Name for this task (e.g., "Email Auto-Responder")' },
+      name: { type: 'string', description: 'Name for this task (e.g., "Competitor Research")' },
       task: { 
         type: 'string', 
-        description: 'What the AI should do (e.g., "Check my inbox for new emails from leads and draft responses")' 
+        description: 'What the AI should do (e.g., "Research top 5 competitors and summarize their positioning")' 
       },
       when: { 
         type: 'string', 
-        description: 'When to run (e.g., "every hour", "every day at 9am", "every 30 minutes")' 
+        description: 'When to run. One-shot: "in 20 minutes", "at 3pm", "tonight at 2am", "tomorrow at 9am". Recurring: "every hour", "every day at 9am".' 
       },
       productId: { type: 'string', description: 'Product context for the task (optional)' },
       campaignId: { type: 'string', description: 'Campaign context for the task (optional)' },
@@ -213,12 +255,57 @@ export const scheduleTaskTool: Tool = {
   },
 
   async execute(params): Promise<ToolResult> {
+    // Check if it's a one-shot schedule
+    if (Scheduler.isOneShot(params.when)) {
+      const executeAt = Scheduler.parseToTimestamp(params.when);
+      
+      if (!executeAt) {
+        return {
+          success: false,
+          message: `Could not parse schedule "${params.when}". Try "in 20 minutes", "at 3pm", "tonight at 2am", etc.`,
+        };
+      }
+
+      const job = await scheduler.addJob({
+        name: params.name,
+        description: params.task.slice(0, 200),
+        executeAt,
+        oneShot: true,
+        deleteAfterRun: true,
+        type: 'task',
+        enabled: true,
+        payload: {
+          content: params.task,
+          productId: params.productId,
+          campaignId: params.campaignId,
+          metadata: { 
+            notify: params.notify !== false,
+          },
+        },
+      });
+
+      const scheduledTime = new Date(executeAt).toLocaleString();
+      return {
+        success: true,
+        message: `⏰ Task "${params.name}" scheduled for ${scheduledTime}. I'll notify you when it's done.`,
+        data: { 
+          jobId: job.id, 
+          name: params.name,
+          task: params.task,
+          executeAt,
+          oneShot: true,
+          notify: params.notify !== false,
+        },
+      };
+    }
+
+    // Recurring schedule
     const cronExpression = Scheduler.parseToCron(params.when);
     
     if (!cronExpression) {
       return {
         success: false,
-        message: `Could not parse schedule "${params.when}". Try formats like "every hour", "every day at 09:00", "every 30 minutes", or a cron expression.`,
+        message: `Could not parse schedule "${params.when}". Try "every hour", "every day at 9am", "every 30 minutes", or a cron expression.`,
       };
     }
 
@@ -240,12 +327,13 @@ export const scheduleTaskTool: Tool = {
 
     return {
       success: true,
-      message: `Automated task "${params.name}" scheduled. The AI will execute this task ${params.when}.`,
+      message: `🔁 Recurring task "${params.name}" scheduled (${params.when}).`,
       data: { 
         jobId: job.id, 
         name: params.name,
         task: params.task,
         schedule: cronExpression,
+        recurring: true,
         notify: params.notify !== false,
       },
     };

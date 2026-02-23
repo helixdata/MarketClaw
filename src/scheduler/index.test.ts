@@ -617,4 +617,128 @@ describe('Scheduler', () => {
       errorScheduler.stopAll();
     });
   });
+
+  describe('parseToTimestamp', () => {
+    it('should parse "in X minutes"', () => {
+      const now = Date.now();
+      const result = Scheduler.parseToTimestamp('in 20 minutes');
+      expect(result).toBeGreaterThan(now);
+      expect(result).toBeLessThanOrEqual(now + 21 * 60 * 1000);
+    });
+
+    it('should parse "in X hours"', () => {
+      const now = Date.now();
+      const result = Scheduler.parseToTimestamp('in 2 hours');
+      expect(result).toBeGreaterThan(now);
+      expect(result).toBeLessThanOrEqual(now + 2.1 * 60 * 60 * 1000);
+    });
+
+    it('should parse "in X seconds"', () => {
+      const now = Date.now();
+      const result = Scheduler.parseToTimestamp('in 30 seconds');
+      expect(result).toBeGreaterThan(now);
+      expect(result).toBeLessThanOrEqual(now + 31 * 1000);
+    });
+
+    it('should parse "at HH:MM"', () => {
+      const result = Scheduler.parseToTimestamp('at 14:30');
+      expect(result).toBeDefined();
+      const date = new Date(result!);
+      expect(date.getHours()).toBe(14);
+      expect(date.getMinutes()).toBe(30);
+    });
+
+    it('should parse "at H:MM am/pm"', () => {
+      const result = Scheduler.parseToTimestamp('at 3:30 pm');
+      expect(result).toBeDefined();
+      const date = new Date(result!);
+      expect(date.getHours()).toBe(15);
+      expect(date.getMinutes()).toBe(30);
+    });
+
+    it('should parse "tomorrow at HH:MM"', () => {
+      const now = new Date();
+      const result = Scheduler.parseToTimestamp('tomorrow at 09:00');
+      expect(result).toBeDefined();
+      const date = new Date(result!);
+      expect(date.getDate()).toBe(now.getDate() + 1);
+      expect(date.getHours()).toBe(9);
+    });
+
+    it('should return null for invalid input', () => {
+      expect(Scheduler.parseToTimestamp('gibberish')).toBeNull();
+      expect(Scheduler.parseToTimestamp('not a time')).toBeNull();
+    });
+
+    it('should be case insensitive', () => {
+      expect(Scheduler.parseToTimestamp('IN 20 MINUTES')).toBeDefined();
+      expect(Scheduler.parseToTimestamp('At 3 PM')).toBeDefined();
+    });
+  });
+
+  describe('isOneShot', () => {
+    it('should return true for "in X" patterns', () => {
+      expect(Scheduler.isOneShot('in 20 minutes')).toBe(true);
+      expect(Scheduler.isOneShot('in 2 hours')).toBe(true);
+    });
+
+    it('should return true for "at X" patterns', () => {
+      expect(Scheduler.isOneShot('at 3pm')).toBe(true);
+      expect(Scheduler.isOneShot('at 14:30')).toBe(true);
+    });
+
+    it('should return true for "tomorrow" patterns', () => {
+      expect(Scheduler.isOneShot('tomorrow at 9am')).toBe(true);
+    });
+
+    it('should return true for "tonight" patterns', () => {
+      expect(Scheduler.isOneShot('tonight at 10pm')).toBe(true);
+    });
+
+    it('should return false for recurring patterns', () => {
+      expect(Scheduler.isOneShot('every hour')).toBe(false);
+      expect(Scheduler.isOneShot('every day at 9am')).toBe(false);
+      expect(Scheduler.isOneShot('0 9 * * *')).toBe(false);
+    });
+  });
+
+  describe('one-shot job execution', () => {
+    it('should add a one-shot job', async () => {
+      const executeAt = Date.now() + 60000; // 1 minute from now
+      const job = await scheduler.addJob({
+        name: 'One Shot Test',
+        executeAt,
+        oneShot: true,
+        deleteAfterRun: true,
+        type: 'task',
+        enabled: true,
+        payload: { content: 'Test task' },
+      });
+
+      expect(job.id).toBeDefined();
+      expect(job.oneShot).toBe(true);
+      expect(job.executeAt).toBe(executeAt);
+      expect(job.nextRun).toBe(executeAt);
+    });
+
+    it('should execute one-shot job immediately if time has passed', async () => {
+      const executeHandler = vi.fn();
+      scheduler.on('job:execute', executeHandler);
+
+      const executeAt = Date.now() - 1000; // 1 second ago
+      await scheduler.addJob({
+        name: 'Past One Shot',
+        executeAt,
+        oneShot: true,
+        type: 'task',
+        enabled: true,
+        payload: { content: 'Should run immediately' },
+      });
+
+      // Give it a moment to execute
+      await new Promise(r => setTimeout(r, 100));
+      
+      expect(executeHandler).toHaveBeenCalled();
+    });
+  });
 });
