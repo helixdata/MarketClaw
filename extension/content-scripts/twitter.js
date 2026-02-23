@@ -53,10 +53,48 @@ async function typeText(element, text) {
 }
 
 /**
+ * Dismiss any modal dialogs (like "You've unlocked more on X")
+ */
+async function dismissModals() {
+  const modalSelectors = [
+    '[data-testid="sheetDialog"] button', // Generic sheet dialog
+    '[role="dialog"] button[type="button"]', // Dialog buttons
+    'div[data-testid="confirmationSheetConfirm"]', // Confirmation buttons
+    'button:has-text("Got it")', // "Got it" buttons
+  ];
+  
+  for (const selector of modalSelectors) {
+    const buttons = document.querySelectorAll(selector);
+    for (const btn of buttons) {
+      const text = btn.textContent?.toLowerCase() || '';
+      if (text.includes('got it') || text.includes('dismiss') || text.includes('close') || text.includes('not now')) {
+        console.log('[MarketClaw] Dismissing modal:', text);
+        btn.click();
+        await delay(500);
+        return true;
+      }
+    }
+  }
+  
+  // Try aria-label approach
+  const closeButtons = document.querySelectorAll('[aria-label="Close"], [aria-label="Dismiss"]');
+  for (const btn of closeButtons) {
+    btn.click();
+    await delay(500);
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Post a tweet
  */
 async function postTweet(content, mediaUrls = []) {
   try {
+    // First, dismiss any modals that might be in the way
+    await dismissModals();
+    
     // Check if we're on compose page or need to open composer
     const isComposePage = window.location.pathname.includes('/compose/tweet');
     
@@ -133,6 +171,10 @@ async function postTweet(content, mediaUrls = []) {
     
     // Wait for confirmation
     await delay(2000);
+    
+    // Dismiss any post-submit modals (like "You've unlocked more on X")
+    await dismissModals();
+    await delay(500);
     
     // Check if composer closed (indicates success)
     const composerStillOpen = document.querySelector('[data-testid="tweetTextarea_0"]');
