@@ -22,30 +22,49 @@ const TYPING_REFRESH_INTERVAL = 4000;
 
 /**
  * Keep typing indicator alive during long operations
+ * Uses bot.telegram directly instead of ctx to avoid stale context issues
  * Returns a stop function to call when done
  */
-function startTypingIndicator(ctx: any): () => void {
+function startTypingIndicator(bot: Telegraf, chatId: number | string): () => void {
   let stopped = false;
+  let refreshCount = 0;
   
   const sendTyping = async () => {
     if (stopped) return;
     try {
-      await ctx.sendChatAction('typing');
+      await bot.telegram.sendChatAction(chatId, 'typing');
+      refreshCount++;
+      logger.debug({ chatId, refreshCount }, 'Typing indicator refreshed');
     } catch (err) {
-      // Ignore errors (e.g., if chat was deleted)
+      // Log but don't stop - might be transient
+      logger.warn({ chatId, err, refreshCount }, 'Failed to refresh typing indicator');
     }
   };
   
   // Send immediately
   sendTyping();
   
-  // Then refresh every 4 seconds
-  const interval = setInterval(sendTyping, TYPING_REFRESH_INTERVAL);
+  // Use recursive setTimeout instead of setInterval for more reliable timing
+  let timeoutId: NodeJS.Timeout | null = null;
+  
+  const scheduleNext = () => {
+    if (stopped) return;
+    timeoutId = setTimeout(() => {
+      sendTyping();
+      scheduleNext();
+    }, TYPING_REFRESH_INTERVAL);
+  };
+  
+  scheduleNext();
   
   // Return stop function
   return () => {
     stopped = true;
-    clearInterval(interval);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    logger.debug({ chatId, totalRefreshes: refreshCount }, 'Typing indicator stopped');
   };
 }
 
@@ -141,20 +160,38 @@ export class TelegramChannel implements Channel {
     if (response.attachments && response.attachments.length > 0) {
       for (const attachment of response.attachments) {
         try {
-          await this.bot.telegram.sendDocument(
-            numericUserId,
-            {
-              source: attachment.buffer,
-              filename: attachment.filename,
-            },
-            {
-              caption: attachment.caption,
-              reply_parameters: response.replyToId 
-                ? { message_id: parseInt(response.replyToId, 10) } 
-                : undefined,
-            }
-          );
-          logger.info({ filename: attachment.filename, userId }, 'Sent attachment');
+          const replyParams = response.replyToId 
+            ? { message_id: parseInt(response.replyToId, 10) } 
+            : undefined;
+          
+          // Check if this is an image - use sendPhoto for inline display
+          const isImage = attachment.mimeType?.startsWith('image/') || 
+            /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.filename);
+          
+          if (isImage) {
+            await this.bot.telegram.sendPhoto(
+              numericUserId,
+              { source: attachment.buffer },
+              {
+                caption: attachment.caption,
+                reply_parameters: replyParams,
+              }
+            );
+            logger.info({ filename: attachment.filename, userId }, 'Sent image');
+          } else {
+            await this.bot.telegram.sendDocument(
+              numericUserId,
+              {
+                source: attachment.buffer,
+                filename: attachment.filename,
+              },
+              {
+                caption: attachment.caption,
+                reply_parameters: replyParams,
+              }
+            );
+            logger.info({ filename: attachment.filename, userId }, 'Sent attachment');
+          }
         } catch (err) {
           logger.error({ err, filename: attachment.filename, userId }, 'Failed to send attachment');
         }
@@ -318,8 +355,8 @@ export class TelegramChannel implements Channel {
 
       logger.info({ userId: message.userId, text: message.text.slice(0, 50) }, 'Received message');
 
-      // Keep typing indicator alive during processing
-      const stopTyping = startTypingIndicator(ctx);
+      // Keep typing indicator alive during processing (bot is always initialized in handlers)
+      const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
 
       try {
         // Get message handler from registry
@@ -355,7 +392,7 @@ export class TelegramChannel implements Channel {
       const caption = ctx.message.caption || '';
 
       // Keep typing indicator alive during processing
-      const stopTyping = startTypingIndicator(ctx);
+      const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
 
       try {
         // Download the image
@@ -409,7 +446,7 @@ export class TelegramChannel implements Channel {
       const caption = ctx.message.caption || '';
 
       // Keep typing indicator alive during processing
-      const stopTyping = startTypingIndicator(ctx);
+      const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
 
       try {
         let images: ChannelImage[] = [];

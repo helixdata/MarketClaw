@@ -105,7 +105,7 @@ function sendHandshake() {
     ws.send(JSON.stringify({
       type: 'handshake',
       client: 'marketclaw-extension',
-      version: '0.4.0',
+      version: '0.4.2',
       profile: currentProfile,
       capabilities: {
         platforms: Object.keys(PLATFORMS),
@@ -157,7 +157,7 @@ async function connect() {
     ws.onclose = () => {
       console.log('[MarketClaw] Disconnected');
       isConnected = false;
-      updateBadge('', '#ef4444'); // Red dot, no text when disconnected
+      updateBadge('✗', '#ef4444'); // Red X when disconnected
       
       // Reconnect after delay
       setTimeout(connect, RECONNECT_INTERVAL);
@@ -165,12 +165,14 @@ async function connect() {
     
     ws.onerror = (err) => {
       console.error('[MarketClaw] WebSocket error:', err);
+      isConnected = false;
       updateBadge('!', '#ef4444'); // Red exclamation on error
     };
     
   } catch (err) {
     console.error('[MarketClaw] Connection error:', err);
-    updateBadge('', '#ef4444');
+    isConnected = false;
+    updateBadge('✗', '#ef4444'); // Red X on connection failure
     setTimeout(connect, RECONNECT_INTERVAL);
   }
 }
@@ -199,7 +201,7 @@ async function handleCommand(message) {
         connected: isConnected, 
         platforms: Object.keys(PLATFORMS),
         primitives: PRIMITIVES,
-        version: '0.2.0'
+        version: '0.4.2'
       };
       
     case 'post':
@@ -608,7 +610,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// Start connection
+// ============================================
+// KEEPALIVE - Prevent MV3 service worker sleep
+// ============================================
+
+const KEEPALIVE_ALARM = 'marketclaw-keepalive';
+const KEEPALIVE_INTERVAL_MINUTES = 0.4; // ~24 seconds (must be >= 0.4 for alarms)
+
+/**
+ * Set up keepalive alarm to prevent service worker from sleeping
+ */
+async function setupKeepalive() {
+  // Clear any existing alarm
+  await chrome.alarms.clear(KEEPALIVE_ALARM);
+  
+  // Create recurring alarm (minimum interval is ~24 seconds / 0.4 minutes)
+  chrome.alarms.create(KEEPALIVE_ALARM, {
+    periodInMinutes: KEEPALIVE_INTERVAL_MINUTES
+  });
+  
+  console.log('[MarketClaw] Keepalive alarm set');
+}
+
+// Handle alarm events
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) {
+    // Just touching the service worker keeps it alive
+    console.log('[MarketClaw] Keepalive ping', new Date().toISOString());
+    
+    // If WebSocket died, reconnect
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.log('[MarketClaw] WebSocket dead, reconnecting...');
+      isConnected = false;
+      updateBadge('✗', '#ef4444'); // Show disconnected while reconnecting
+      connect();
+    }
+  }
+});
+
+// Also keep alive when tab is updated (user is active)
+chrome.tabs.onUpdated.addListener(() => {
+  // Touch the service worker
+});
+
+// Set initial badge state (disconnected until we connect)
+updateBadge('✗', '#ef4444'); // Red X = not connected
+
+// Start connection and keepalive
+setupKeepalive();
 connect();
 
-console.log('[MarketClaw] Extension loaded');
+console.log('[MarketClaw] Extension loaded with keepalive');

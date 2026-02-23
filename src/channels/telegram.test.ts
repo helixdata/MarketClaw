@@ -9,6 +9,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 const mockTelegram = {
   sendMessage: vi.fn().mockResolvedValue({}),
   sendDocument: vi.fn().mockResolvedValue({}),
+  sendPhoto: vi.fn().mockResolvedValue({}),
+  sendChatAction: vi.fn().mockResolvedValue({}),
   getMe: vi.fn().mockResolvedValue({ id: 12345, username: 'test_bot' }),
 };
 
@@ -1142,7 +1144,9 @@ describe('TelegramChannel Image Support', () => {
 
       await photoHandler!(ctx);
 
-      expect(ctx.sendChatAction).toHaveBeenCalledWith('typing');
+      // Typing indicator now uses bot.telegram.sendChatAction directly
+      const mockTelegram = getMockTelegram();
+      expect(mockTelegram.sendChatAction).toHaveBeenCalledWith(ctx.chat.id, 'typing');
     });
   });
 
