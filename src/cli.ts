@@ -554,4 +554,107 @@ skillCmd
     }
   });
 
+// Update command
+program
+  .command('update')
+  .description('Update MarketClaw to the latest version')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--check', 'Only check for updates, don\'t install')
+  .action(async (options) => {
+    const { execSync } = await import('child_process');
+    const { createInterface } = await import('readline');
+    
+    // Find the installation directory (where this script is running from)
+    const installDir = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+    
+    console.log(chalk.cyan('🦀 MarketClaw Update\n'));
+    console.log(`Installation: ${chalk.gray(installDir)}`);
+    
+    try {
+      // Check if it's a git repo
+      execSync('git rev-parse --git-dir', { cwd: installDir, stdio: 'pipe' });
+    } catch {
+      console.log(chalk.red('\n✗ Not a git installation. Update manually or reinstall from GitHub.'));
+      console.log(chalk.gray('  https://github.com/helixdata/MarketClaw'));
+      return;
+    }
+    
+    // Fetch latest
+    console.log('\nChecking for updates...');
+    try {
+      execSync('git fetch', { cwd: installDir, stdio: 'pipe' });
+    } catch (err) {
+      console.log(chalk.red('✗ Failed to fetch updates. Check your internet connection.'));
+      return;
+    }
+    
+    // Check if behind
+    const local = execSync('git rev-parse HEAD', { cwd: installDir, encoding: 'utf-8' }).trim();
+    const remote = execSync('git rev-parse @{u}', { cwd: installDir, encoding: 'utf-8' }).trim();
+    
+    if (local === remote) {
+      console.log(chalk.green('\n✓ Already up to date!'));
+      return;
+    }
+    
+    // Show what's new
+    const commits = execSync(`git log --oneline ${local}..${remote}`, { cwd: installDir, encoding: 'utf-8' }).trim();
+    const commitCount = commits.split('\n').filter(l => l).length;
+    
+    console.log(chalk.yellow(`\n${commitCount} new commit(s) available:\n`));
+    console.log(chalk.gray(commits));
+    console.log();
+    
+    if (options.check) {
+      console.log(chalk.cyan('Run `marketclaw update` to install.'));
+      return;
+    }
+    
+    // Confirm unless --yes
+    if (!options.yes) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>(resolve => {
+        rl.question('Install updates? [y/N] ', resolve);
+      });
+      rl.close();
+      
+      if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+        console.log(chalk.gray('Update cancelled.'));
+        return;
+      }
+    }
+    
+    // Pull
+    console.log('\nPulling updates...');
+    try {
+      execSync('git pull', { cwd: installDir, stdio: 'inherit' });
+    } catch {
+      console.log(chalk.red('✗ Failed to pull. You may have local changes.'));
+      console.log(chalk.gray('  Try: git stash && marketclaw update && git stash pop'));
+      return;
+    }
+    
+    // Install deps
+    console.log('\nInstalling dependencies...');
+    try {
+      execSync('npm install', { cwd: installDir, stdio: 'inherit' });
+    } catch {
+      console.log(chalk.red('✗ Failed to install dependencies.'));
+      return;
+    }
+    
+    // Build
+    console.log('\nBuilding...');
+    try {
+      execSync('npm run build', { cwd: installDir, stdio: 'inherit' });
+    } catch {
+      console.log(chalk.red('✗ Build failed.'));
+      return;
+    }
+    
+    console.log(chalk.green('\n✓ Update complete!'));
+    console.log(chalk.cyan('\nRestart MarketClaw to use the new version:'));
+    console.log(chalk.gray('  marketclaw start'));
+  });
+
 program.parse();
