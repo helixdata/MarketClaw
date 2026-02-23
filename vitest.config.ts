@@ -32,10 +32,10 @@ export default defineConfig({
         'src/auth/google-calendar.ts',
       ],
       thresholds: {
-        statements: 85,
-        branches: 77,  // Lowered temporarily - TODO: improve test coverage
-        functions: 85,
-        lines: 85,
+        statements: 88,
+        branches: 82,
+        functions: 88,
+        lines: 88,
       },
     },
   },
