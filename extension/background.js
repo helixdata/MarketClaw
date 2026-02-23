@@ -9,27 +9,119 @@ const RECONNECT_INTERVAL = 5000;
 
 let ws = null;
 let isConnected = false;
+let currentProfile = 'Default';
+
+// Available primitive actions
+const PRIMITIVES = [
+  'click',      // Click an element
+  'type',       // Type text into an element
+  'find',       // Find elements matching selector
+  'getText',    // Get text content of element
+  'getAttribute', // Get attribute value
+  'setAttribute', // Set attribute value
+  'scroll',     // Scroll page or element
+  'hover',      // Hover over element
+  'focus',      // Focus an element
+  'select',     // Select option in dropdown
+  'setChecked', // Check/uncheck checkbox
+  'wait',       // Wait for element to appear
+  'waitGone',   // Wait for element to disappear
+  'delay',      // Wait for specified time
+  'pageInfo',   // Get page info (url, title, dimensions)
+  'evaluate'    // Execute arbitrary JavaScript
+];
 
 // Platform configurations
 const PLATFORMS = {
   twitter: {
     patterns: ['twitter.com', 'x.com'],
-    contentScript: 'content-scripts/twitter.js'
+    contentScript: 'content-scripts/twitter.js',
+    postUrl: 'https://twitter.com/compose/tweet'
   },
   linkedin: {
     patterns: ['linkedin.com'],
-    contentScript: 'content-scripts/linkedin.js'
+    contentScript: 'content-scripts/linkedin.js',
+    postUrl: 'https://www.linkedin.com/feed/'
   },
   instagram: {
     patterns: ['instagram.com'],
-    contentScript: 'content-scripts/instagram.js'
+    contentScript: 'content-scripts/instagram.js',
+    postUrl: 'https://www.instagram.com/'
+  },
+  reddit: {
+    patterns: ['reddit.com', 'old.reddit.com'],
+    contentScript: 'content-scripts/reddit.js',
+    postUrl: 'https://www.reddit.com/submit'
+  },
+  hackernews: {
+    patterns: ['news.ycombinator.com'],
+    contentScript: 'content-scripts/hackernews.js',
+    postUrl: 'https://news.ycombinator.com/submit'
+  },
+  producthunt: {
+    patterns: ['producthunt.com'],
+    contentScript: 'content-scripts/producthunt.js',
+    postUrl: 'https://www.producthunt.com/posts/new'
+  },
+  facebook: {
+    patterns: ['facebook.com'],
+    contentScript: 'content-scripts/facebook.js',
+    postUrl: 'https://www.facebook.com/'
+  },
+  threads: {
+    patterns: ['threads.net'],
+    contentScript: 'content-scripts/threads.js',
+    postUrl: 'https://www.threads.net/'
+  },
+  bluesky: {
+    patterns: ['bsky.app'],
+    contentScript: 'content-scripts/bluesky.js',
+    postUrl: 'https://bsky.app/'
+  },
+  youtube: {
+    patterns: ['youtube.com'],
+    contentScript: 'content-scripts/youtube.js',
+    postUrl: 'https://www.youtube.com/'
   }
 };
 
 /**
+ * Load profile name from storage
+ */
+async function loadProfile() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['profileName'], (result) => {
+      currentProfile = result.profileName || 'Default';
+      resolve(currentProfile);
+    });
+  });
+}
+
+/**
+ * Send handshake with current profile
+ */
+function sendHandshake() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'handshake',
+      client: 'marketclaw-extension',
+      version: '0.4.0',
+      profile: currentProfile,
+      capabilities: {
+        platforms: Object.keys(PLATFORMS),
+        primitives: PRIMITIVES
+      }
+    }));
+  }
+}
+
+/**
  * Connect to MarketClaw WebSocket server
  */
-function connect() {
+async function connect() {
+  // Load profile before connecting
+  await loadProfile();
+  
   try {
     ws = new WebSocket(WS_URL);
     updateBadge('...', '#f59e0b'); // Yellow while connecting
@@ -39,13 +131,8 @@ function connect() {
       isConnected = true;
       updateBadge('✓', '#22c55e'); // Green checkmark when connected
       
-      // Send handshake
-      ws.send(JSON.stringify({
-        type: 'handshake',
-        client: 'marketclaw-extension',
-        version: '0.1.0',
-        capabilities: ['twitter', 'linkedin', 'instagram']
-      }));
+      // Send handshake with profile
+      sendHandshake();
     };
     
     ws.onmessage = async (event) => {
@@ -107,7 +194,13 @@ async function handleCommand(message) {
       return { success: true, pong: true };
       
     case 'status':
-      return { success: true, connected: isConnected, platforms: Object.keys(PLATFORMS) };
+      return { 
+        success: true, 
+        connected: isConnected, 
+        platforms: Object.keys(PLATFORMS),
+        primitives: PRIMITIVES,
+        version: '0.2.0'
+      };
       
     case 'post':
       return await handlePost(platform, params);
@@ -120,6 +213,25 @@ async function handleCommand(message) {
       
     case 'execute':
       return await handleExecute(params.tabId, params.script);
+    
+    // Generic primitives
+    case 'click':
+    case 'type':
+    case 'find':
+    case 'getText':
+    case 'getAttribute':
+    case 'setAttribute':
+    case 'scroll':
+    case 'hover':
+    case 'focus':
+    case 'select':
+    case 'setChecked':
+    case 'wait':
+    case 'waitGone':
+    case 'delay':
+    case 'pageInfo':
+    case 'evaluate':
+      return await handlePrimitive(params.tabId, { action, ...params });
       
     default:
       return { success: false, error: `Unknown action: ${action}` };
@@ -174,14 +286,8 @@ async function findOrCreateTab(platform) {
     }
   }
   
-  // Create new tab
-  const urls = {
-    twitter: 'https://twitter.com/compose/tweet',
-    linkedin: 'https://www.linkedin.com/feed/',
-    instagram: 'https://www.instagram.com/'
-  };
-  
-  return await chrome.tabs.create({ url: urls[platform] || `https://${config.patterns[0]}` });
+  // Create new tab using platform's postUrl
+  return await chrome.tabs.create({ url: config.postUrl || `https://${config.patterns[0]}` });
 }
 
 /**
@@ -251,6 +357,217 @@ async function handleExecute(tabId, script) {
 }
 
 /**
+ * Handle primitive DOM commands
+ * @param {number} tabId - Tab to execute in (uses active tab if not specified)
+ * @param {Object} command - Primitive command object
+ */
+async function handlePrimitive(tabId, command) {
+  try {
+    // Get target tab
+    let targetTabId = tabId;
+    if (!targetTabId) {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        return { success: false, error: 'No active tab found' };
+      }
+      targetTabId = activeTab.id;
+    }
+    
+    // Wait for tab to be ready
+    await waitForTab(targetTabId);
+    
+    // Inject and execute primitive
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: executePrimitiveInPage,
+      args: [command]
+    });
+    
+    return results[0]?.result || { success: false, error: 'No result from primitive' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Execute a primitive command in the page context
+ * This function is injected into the page
+ */
+function executePrimitiveInPage(command) {
+  const { action, selector, text, attribute, value, values, checked, ms, script, timeout, options = {} } = command;
+  
+  // Helper functions
+  const waitForElement = (sel, time = 10000) => {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      const check = () => {
+        const el = document.querySelector(sel);
+        if (el) resolve(el);
+        else if (Date.now() - startTime > time) reject(new Error(`Element not found: ${sel}`));
+        else setTimeout(check, 100);
+      };
+      check();
+    });
+  };
+  
+  const delay = (milliseconds) => new Promise(r => setTimeout(r, milliseconds));
+  
+  // Execute the command
+  return (async () => {
+    try {
+      switch (action) {
+        case 'click': {
+          const el = await waitForElement(selector, timeout || 10000);
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await delay(100);
+          el.focus();
+          el.click();
+          return { success: true, result: { clicked: true, selector } };
+        }
+        
+        case 'type': {
+          const el = await waitForElement(selector, timeout || 10000);
+          el.focus();
+          el.click();
+          await delay(50);
+          if (options.clear !== false) {
+            document.execCommand('selectAll', false, null);
+          }
+          document.execCommand('insertText', false, text);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { success: true, result: { typed: true, selector, length: text.length } };
+        }
+        
+        case 'find': {
+          const elements = document.querySelectorAll(selector);
+          const limit = options.limit || 10;
+          const results = [];
+          for (let i = 0; i < Math.min(elements.length, limit); i++) {
+            const el = elements[i];
+            const rect = el.getBoundingClientRect();
+            results.push({
+              index: i,
+              tagName: el.tagName.toLowerCase(),
+              text: el.textContent?.substring(0, 100)?.trim(),
+              visible: rect.width > 0 && rect.height > 0,
+              id: el.id,
+              className: el.className
+            });
+          }
+          return { success: true, result: { count: elements.length, elements: results } };
+        }
+        
+        case 'getText': {
+          const el = await waitForElement(selector, timeout || 10000);
+          return { success: true, result: { text: el.textContent?.trim(), selector } };
+        }
+        
+        case 'getAttribute': {
+          const el = await waitForElement(selector, timeout || 10000);
+          return { success: true, result: { attribute, value: el.getAttribute(attribute), selector } };
+        }
+        
+        case 'setAttribute': {
+          const el = await waitForElement(selector, timeout || 10000);
+          el.setAttribute(attribute, value);
+          return { success: true, result: { attribute, value, selector } };
+        }
+        
+        case 'scroll': {
+          const dir = options.direction || 'down';
+          const amount = options.amount || 300;
+          switch (dir) {
+            case 'down': window.scrollBy({ top: amount, behavior: 'smooth' }); break;
+            case 'up': window.scrollBy({ top: -amount, behavior: 'smooth' }); break;
+            case 'top': window.scrollTo({ top: 0, behavior: 'smooth' }); break;
+            case 'bottom': window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); break;
+          }
+          return { success: true, result: { scrolled: true, direction: dir } };
+        }
+        
+        case 'hover': {
+          const el = await waitForElement(selector, timeout || 10000);
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await delay(100);
+          el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          return { success: true, result: { hovered: true, selector } };
+        }
+        
+        case 'focus': {
+          const el = await waitForElement(selector, timeout || 10000);
+          el.focus();
+          return { success: true, result: { focused: true, selector } };
+        }
+        
+        case 'select': {
+          const el = await waitForElement(selector, timeout || 10000);
+          const vals = Array.isArray(values) ? values : [values];
+          for (const opt of el.options) {
+            opt.selected = vals.includes(opt.value);
+          }
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { success: true, result: { selected: true, selector, values: vals } };
+        }
+        
+        case 'setChecked': {
+          const el = await waitForElement(selector, timeout || 10000);
+          if (el.checked !== checked) el.click();
+          return { success: true, result: { checked: el.checked, selector } };
+        }
+        
+        case 'wait': {
+          await waitForElement(selector, timeout || 10000);
+          return { success: true, result: { found: true, selector } };
+        }
+        
+        case 'waitGone': {
+          const startTime = Date.now();
+          const time = timeout || 10000;
+          while (Date.now() - startTime < time) {
+            if (!document.querySelector(selector)) {
+              return { success: true, result: { gone: true, selector } };
+            }
+            await delay(100);
+          }
+          throw new Error(`Element still present: ${selector}`);
+        }
+        
+        case 'delay': {
+          await delay(ms || 1000);
+          return { success: true, result: { delayed: true, ms: ms || 1000 } };
+        }
+        
+        case 'pageInfo': {
+          return {
+            success: true,
+            result: {
+              url: window.location.href,
+              title: document.title,
+              readyState: document.readyState,
+              scrollY: window.scrollY,
+              innerWidth: window.innerWidth,
+              innerHeight: window.innerHeight
+            }
+          };
+        }
+        
+        case 'evaluate': {
+          const evalResult = eval(script);
+          return { success: true, result: evalResult };
+        }
+        
+        default:
+          return { success: false, error: `Unknown primitive: ${action}` };
+      }
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  })();
+}
+
+/**
  * Content posting function (injected into page)
  */
 function postContent(platform, content, mediaUrls) {
@@ -281,7 +598,12 @@ function postContent(platform, content, mediaUrls) {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'getStatus') {
-    sendResponse({ connected: isConnected });
+    sendResponse({ connected: isConnected, profile: currentProfile });
+  } else if (message.type === 'updateProfile') {
+    currentProfile = message.profile || 'Default';
+    // Re-send handshake with new profile
+    sendHandshake();
+    sendResponse({ success: true, profile: currentProfile });
   }
   return true;
 });

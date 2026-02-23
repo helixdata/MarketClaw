@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MarketClaw Automation",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Browser automation for MarketClaw - post to social media programmatically",
   "permissions": [
     "tabs",
@@ -14,7 +14,15 @@
     "https://x.com/*",
     "https://www.linkedin.com/*",
     "https://www.instagram.com/*",
-    "https://www.facebook.com/*"
+    "https://www.facebook.com/*",
+    "https://www.reddit.com/*",
+    "https://old.reddit.com/*",
+    "https://news.ycombinator.com/*",
+    "https://www.producthunt.com/*",
+    "https://www.threads.net/*",
+    "https://bsky.app/*",
+    "https://www.youtube.com/*",
+    "https://youtube.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -42,6 +50,46 @@
     {
       "matches": ["https://www.linkedin.com/*"],
       "js": ["content-scripts/linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
+      "js": ["content-scripts/reddit.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content-scripts/instagram.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://news.ycombinator.com/*"],
+      "js": ["content-scripts/hackernews.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.producthunt.com/*"],
+      "js": ["content-scripts/producthunt.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.facebook.com/*"],
+      "js": ["content-scripts/facebook.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.threads.net/*"],
+      "js": ["content-scripts/threads.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://bsky.app/*"],
+      "js": ["content-scripts/bluesky.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.youtube.com/*", "https://youtube.com/*"],
+      "js": ["content-scripts/youtube.js"],
       "run_at": "document_idle"
     }
   ]

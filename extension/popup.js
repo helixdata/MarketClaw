@@ -7,6 +7,32 @@ const statusText = document.getElementById('statusText');
 const postButton = document.getElementById('postButton');
 const postContent = document.getElementById('postContent');
 const platformSelect = document.getElementById('platformSelect');
+const profileName = document.getElementById('profileName');
+const profileBadge = document.getElementById('profileBadge');
+const saveProfileBtn = document.getElementById('saveProfile');
+
+// Load saved profile name
+chrome.storage.local.get(['profileName'], (result) => {
+  const name = result.profileName || 'Default';
+  profileName.value = name;
+  profileBadge.textContent = name;
+});
+
+// Save profile name
+saveProfileBtn.addEventListener('click', () => {
+  const name = profileName.value.trim() || 'Default';
+  chrome.storage.local.set({ profileName: name }, () => {
+    profileBadge.textContent = name;
+    saveProfileBtn.textContent = 'Saved!';
+    
+    // Notify background script to update handshake
+    chrome.runtime.sendMessage({ type: 'updateProfile', profile: name });
+    
+    setTimeout(() => {
+      saveProfileBtn.textContent = 'Save';
+    }, 1500);
+  });
+});
 
 // Check connection status
 chrome.runtime.sendMessage({ type: 'getStatus' }, (response) => {
@@ -66,4 +92,11 @@ postButton.addEventListener('click', async () => {
 // Enable post button when content is entered
 postContent.addEventListener('input', () => {
   postButton.disabled = !postContent.value.trim();
+});
+
+// Handle Enter key in profile input
+profileName.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    saveProfileBtn.click();
+  }
 });

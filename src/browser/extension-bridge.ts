@@ -14,7 +14,8 @@ const DEFAULT_PORT = 7890;
 interface ExtensionClient {
   ws: WebSocket;
   version: string;
-  capabilities: string[];
+  profile: string;
+  capabilities: any;
   connectedAt: Date;
 }
 
@@ -30,6 +31,7 @@ interface BridgeResponse {
   message?: string;
   error?: string;
   data?: any;
+  result?: any;
 }
 
 export class ExtensionBridge extends EventEmitter {
@@ -130,13 +132,15 @@ export class ExtensionBridge extends EventEmitter {
   private handleMessage(ws: WebSocket, message: BridgeMessage): void {
     // Handle handshake
     if (message.type === 'handshake') {
+      const profile = message.profile || 'Default';
       this.clients.set(ws, {
         ws,
         version: message.version || 'unknown',
-        capabilities: message.capabilities || [],
+        profile,
+        capabilities: message.capabilities || {},
         connectedAt: new Date(),
       });
-      console.log('[ExtensionBridge] Client registered:', message);
+      console.log(`[ExtensionBridge] Client registered: profile="${profile}", version=${message.version}`);
       this.emit('connect', this.clients.get(ws));
       return;
     }
@@ -152,6 +156,7 @@ export class ExtensionBridge extends EventEmitter {
           message: message.message,
           error: message.error,
           data: message.data,
+          result: message.result,
         });
       }
       return;
@@ -163,10 +168,16 @@ export class ExtensionBridge extends EventEmitter {
 
   /**
    * Send a command to the extension and wait for response
+   * @param command - The command to send
+   * @param timeoutMs - Timeout in milliseconds
+   * @param profile - Optional profile name to target a specific browser profile
    */
-  async send(command: BridgeMessage, timeoutMs: number = 30000): Promise<BridgeResponse> {
-    const client = this.getActiveClient();
+  async send(command: BridgeMessage, timeoutMs: number = 30000, profile?: string): Promise<BridgeResponse> {
+    const client = profile ? this.getClientByProfile(profile) : this.getActiveClient();
     if (!client) {
+      if (profile) {
+        return { success: false, error: `No extension connected for profile "${profile}". Connected profiles: ${this.getConnectedProfiles().join(', ') || 'none'}` };
+      }
       return { success: false, error: 'No extension connected' };
     }
 
@@ -182,6 +193,31 @@ export class ExtensionBridge extends EventEmitter {
       this.pendingRequests.set(id, { resolve, reject, timeout });
       client.ws.send(JSON.stringify(message));
     });
+  }
+  
+  /**
+   * Get client by profile name
+   */
+  private getClientByProfile(profile: string): ExtensionClient | null {
+    for (const client of this.clients.values()) {
+      if (client.ws.readyState === WebSocket.OPEN && client.profile === profile) {
+        return client;
+      }
+    }
+    return null;
+  }
+  
+  /**
+   * Get list of connected profile names
+   */
+  getConnectedProfiles(): string[] {
+    const profiles: string[] = [];
+    for (const client of this.clients.values()) {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        profiles.push(client.profile);
+      }
+    }
+    return profiles;
   }
 
   /**
@@ -238,13 +274,23 @@ export class ExtensionBridge extends EventEmitter {
   /**
    * Get connection status
    */
-  getStatus(): { connected: boolean; clients: number; capabilities: string[] } {
+  getStatus(): { connected: boolean; clients: number; profiles: string[]; capabilities: any } {
     const client = this.getActiveClient();
     return {
       connected: this.isConnected(),
       clients: this.clients.size,
-      capabilities: client?.capabilities || [],
+      profiles: this.getConnectedProfiles(),
+      capabilities: client?.capabilities || {},
     };
+  }
+
+  /**
+   * Send a generic command to the extension
+   * @param command - The command to send
+   * @param profile - Optional profile name to target a specific browser profile
+   */
+  async sendCommand(command: BridgeMessage, profile?: string): Promise<BridgeResponse> {
+    return this.send(command, 30000, profile);
   }
 }
 
