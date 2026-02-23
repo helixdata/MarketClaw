@@ -225,7 +225,7 @@ export const updateTeamMemberTool: Tool = {
 
   async execute(params): Promise<ToolResult> {
     // Find the member
-    let member = params.memberId
+    const member = params.memberId
       ? teamManager.getMember(params.memberId)
       : teamManager.findMember({ telegramId: params.telegramId });
 

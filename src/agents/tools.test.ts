@@ -96,8 +96,8 @@ function createMockTask(overrides: Partial<AgentTask> = {}): AgentTask {
 }
 
 describe('agentTools export', () => {
-  it('should export all 7 tools', () => {
-    expect(agentTools).toHaveLength(7);
+  it('should export all 8 tools', () => {
+    expect(agentTools).toHaveLength(8);
     expect(agentTools.map(t => t.name)).toEqual([
       'list_agents',
       'delegate_task',
@@ -105,6 +105,7 @@ describe('agentTools export', () => {
       'agent_info',
       'set_agent_model',
       'list_agent_models',
+      'recommend_agent_model',
       'create_agent',
     ]);
   });
