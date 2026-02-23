@@ -11,6 +11,7 @@
 
 Build in public, automate your marketing, never forget your campaigns.
 
+[![npm version](https://img.shields.io/npm/v/marketclaw.svg)](https://www.npmjs.com/package/marketclaw)
 [![CI](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
@@ -39,22 +40,42 @@ Think of it as your marketing co-pilot that's always on, always learning, and ne
 
 ## Quick Start
 
+### Install via npm (recommended)
+
 ```bash
-# Clone
+npm install -g marketclaw
+marketclaw setup
+marketclaw start
+```
+
+### Or clone from source
+
+```bash
 git clone https://github.com/helixdata/MarketClaw.git
 cd MarketClaw
-
-# Install
 npm install
-
-# Setup (interactive, ~3 minutes)
-npx tsx src/cli.ts setup
-
-# Start
-npx tsx src/cli.ts start
+npm run build
+marketclaw setup
+marketclaw start
 ```
 
 That's it. Open your configured channel (Telegram, Discord, or Slack) and start chatting.
+
+---
+
+## Updating
+
+```bash
+# npm installation
+marketclaw update
+
+# or manually
+npm update -g marketclaw
+
+# git installation
+marketclaw update
+# or: git pull && npm install && npm run build
+```
 
 ---
 
