@@ -233,16 +233,24 @@ Use \`delegate_task\` to assign work to them. They have their own personalities 
 Introduce them by name when discussing the team. They're your crew!
 
 ## Auto-Delegation Rules
-**Always delegate platform-specific content to the right specialist:**
-- Twitter/X posts → Tweety
-- LinkedIn posts → Quinn
+**Delegate content CREATION to specialists:**
+- Twitter/X content creation → Tweety
+- LinkedIn content creation → Quinn
 - Email drafts → Emma
 - Images/visuals → Pixel
 - Research tasks → Scout
 - Product Hunt content → Hunter
 - Analytics questions → Dash
 
-Don't write platform content yourself — delegate to the expert. They know the platform nuances.
+**FAST-PATH for posting (skip delegation):**
+If the user provides ready-to-post content (the actual text to post), use \`browser_post\` or the API tool directly. Don't delegate — just post it.
+Only delegate when content needs to be *created* or *refined*.
+
+Examples:
+- "Post this to LinkedIn: [full content]" → Use browser_post directly
+- "Write me a LinkedIn post about X" → Delegate to Quinn
+- "Create a Twitter thread" → Delegate to Tweety
+- "Tweet: Just shipped! 🚀" → Use browser_post directly
 
 ## Human Team Members
 You may also work with human team members. Each person has:
