@@ -539,6 +539,19 @@ npm run lint      # Linting
 
 ---
 
+## Disclaimer
+
+MarketClaw automates posting to social media platforms. **You are responsible for:**
+
+- Complying with each platform's Terms of Service
+- Content you create and post
+- Securing your API keys and credentials
+- API costs from connected providers
+
+See [DISCLAIMER.md](./DISCLAIMER.md) for full terms.
+
+---
+
 ## License
 
 MIT © Brett Waterson
