@@ -161,7 +161,7 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   // Tool loop - keep going until we get a final response
   let finalResponse = '';
   let iterations = 0;
-  const maxIterations = 10;
+  const maxIterations = 25; // Increased for browser automation tasks
   const pendingImages: string[] = []; // Track images to send from tool results
 
   while (iterations < maxIterations) {
@@ -328,7 +328,7 @@ async function executeTask(taskPrompt: string, context?: { productId?: string; c
   // Tool loop
   let finalResponse = '';
   let iterations = 0;
-  const maxIterations = 10;
+  const maxIterations = 25; // Increased for browser automation tasks
 
   while (iterations < maxIterations) {
     iterations++;
