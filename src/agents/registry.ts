@@ -7,9 +7,9 @@ import { SubAgentConfig, SubAgentState, AgentTask, SubAgentManifest } from './ty
 import { providers } from '../providers/index.js';
 import { toolRegistry } from '../tools/index.js';
 import { EventEmitter } from 'events';
-import pino from 'pino';
+import { createAgentLogger, createToolLogger, type AgentLogger } from '../logging/index.js';
 
-const logger = pino({ name: 'agents' });
+const logger = createAgentLogger();
 
 function generateTaskId(): string {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -34,7 +34,7 @@ class SubAgentRegistry extends EventEmitter {
    */
   register(id: string, config: SubAgentConfig): void {
     if (this.agents.has(id)) {
-      logger.warn({ agentId: id }, 'Agent already registered, updating');
+      logger.warn('Agent already registered, updating', { agentId: id });
     }
 
     this.agents.set(id, {
@@ -44,11 +44,11 @@ class SubAgentRegistry extends EventEmitter {
       isRunning: config.enabled,
     });
 
-    logger.info({ 
+    logger.info('Sub-agent registered', { 
       agentId: id, 
       name: config.identity.name,
       specialty: config.specialty.displayName 
-    }, 'Sub-agent registered');
+    });
   }
 
   /**
@@ -109,7 +109,7 @@ class SubAgentRegistry extends EventEmitter {
     if (!agent) return false;
     
     agent.config.model = model;
-    logger.info({ agentId: id, model: model || 'default' }, 'Agent model updated');
+    logger.info('Agent model updated', { agentId: id, model: model || 'default' });
     return true;
   }
 
@@ -172,7 +172,7 @@ class SubAgentRegistry extends EventEmitter {
     agent.activeTasks.push(task);
     this.taskQueue.push(task);
 
-    logger.info({ taskId: task.id, agentId, prompt: prompt.slice(0, 50) }, 'Task spawned');
+    logger.delegation(agentId, prompt.slice(0, 100));
 
     // Start processing if not already
     this.processQueue();
@@ -223,7 +223,7 @@ class SubAgentRegistry extends EventEmitter {
       try {
         await this.executeTask(task);
       } catch (error) {
-        logger.error({ error, taskId: task.id }, 'Task execution failed');
+        logger.delegationError(task.agentId, task.id, error);
       }
     }
 
@@ -238,12 +238,20 @@ class SubAgentRegistry extends EventEmitter {
     if (!agent) {
       task.status = 'failed';
       task.error = 'Agent not found';
+      logger.error('Agent not found for task', { taskId: task.id, agentId: task.agentId });
       return;
     }
 
     task.status = 'running';
     task.startedAt = new Date();
+    const taskStartTime = Date.now();
 
+    logger.info('Task execution started', { 
+      taskId: task.id, 
+      agentId: task.agentId,
+      agentName: agent.config.identity.name,
+    });
+    
     this.emit('task:start', task);
 
     try {
@@ -319,6 +327,7 @@ class SubAgentRegistry extends EventEmitter {
       task.status = 'completed';
       task.result = finalResponse;
       task.completedAt = new Date();
+      const durationMs = Date.now() - taskStartTime;
 
       // Move to completed
       const idx = agent.activeTasks.findIndex(t => t.id === task.id);
@@ -333,7 +342,7 @@ class SubAgentRegistry extends EventEmitter {
       }
 
       this.emit('task:complete', task);
-      logger.info({ taskId: task.id, agentId: task.agentId }, 'Task completed');
+      logger.delegationComplete(task.agentId, task.id, durationMs, true);
 
     } catch (error) {
       task.status = 'failed';
@@ -341,7 +350,7 @@ class SubAgentRegistry extends EventEmitter {
       task.completedAt = new Date();
 
       this.emit('task:error', task);
-      logger.error({ error, taskId: task.id }, 'Task failed');
+      logger.delegationError(task.agentId, task.id, error);
     }
   }
 

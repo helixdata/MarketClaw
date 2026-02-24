@@ -7,9 +7,13 @@ import { Tool, ToolResult } from './types.js';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
+import { createApiLogger } from '../logging/index.js';
 
 // LinkedIn API base
 const LINKEDIN_API = 'https://api.linkedin.com/v2';
+
+// API logger for LinkedIn calls
+const apiLogger = createApiLogger();
 
 // Get token from Keychain (LaunchCrew's stored token)
 async function getLinkedInToken(): Promise<string | null> {
@@ -65,7 +69,11 @@ async function uploadImageToLinkedIn(token: string, imagePath: string): Promise<
       },
     };
     
-    const registerResponse = await fetch(`${LINKEDIN_API}/assets?action=registerUpload`, {
+    const registerUrl = `${LINKEDIN_API}/assets?action=registerUpload`;
+    let startTime = Date.now();
+    apiLogger.request('POST', registerUrl, { 'Content-Type': 'application/json' });
+    
+    const registerResponse = await fetch(registerUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -73,6 +81,8 @@ async function uploadImageToLinkedIn(token: string, imagePath: string): Promise<
       },
       body: JSON.stringify(registerPayload),
     });
+    
+    apiLogger.response('POST', registerUrl, registerResponse.status, Date.now() - startTime);
     
     if (!registerResponse.ok) {
       const error = await registerResponse.text();
@@ -95,6 +105,9 @@ async function uploadImageToLinkedIn(token: string, imagePath: string): Promise<
     const assetUrn = registerResult.value.asset;
     
     // Step 2: Upload the image binary
+    startTime = Date.now();
+    apiLogger.request('PUT', uploadUrl, { 'Content-Type': 'application/octet-stream' });
+    
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
@@ -105,13 +118,17 @@ async function uploadImageToLinkedIn(token: string, imagePath: string): Promise<
       body: imageBuffer,
     });
     
+    apiLogger.response('PUT', uploadUrl, uploadResponse.status, Date.now() - startTime);
+    
     if (!uploadResponse.ok) {
       const error = await uploadResponse.text();
       return { success: false, error: `Failed to upload image: ${error}` };
     }
     
+    apiLogger.info('Image uploaded to LinkedIn', { assetUrn, fileSize });
     return { success: true, assetUrn };
   } catch (err) {
+    apiLogger.requestError('POST', `${LINKEDIN_API}/assets`, err, 0);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -246,7 +263,14 @@ export const postToLinkedInTool: Tool = {
         }];
       }
 
-      const response = await fetch(`${LINKEDIN_API}/ugcPosts`, {
+      const postUrl = `${LINKEDIN_API}/ugcPosts`;
+      const startTime = Date.now();
+      apiLogger.request('POST', postUrl, { 
+        'Content-Type': 'application/json',
+        'X-Restli-Protocol-Version': '2.0.0',
+      });
+      
+      const response = await fetch(postUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -255,6 +279,19 @@ export const postToLinkedInTool: Tool = {
         },
         body: JSON.stringify(payload),
       });
+
+      // Extract rate limit headers if present (safely handle mock responses without headers.get)
+      const rateLimitHeaders: Record<string, string> = {};
+      if (response.headers?.get) {
+        const rateLimitKeys = ['x-li-uuid', 'x-ratelimit-limit', 'x-ratelimit-remaining'];
+        for (const key of rateLimitKeys) {
+          const value = response.headers.get(key);
+          if (value) rateLimitHeaders[key] = value;
+        }
+      }
+      
+      apiLogger.response('POST', postUrl, response.status, Date.now() - startTime, 
+        Object.keys(rateLimitHeaders).length > 0 ? rateLimitHeaders : undefined);
 
       if (!response.ok) {
         const error = await response.text();
@@ -266,6 +303,8 @@ export const postToLinkedInTool: Tool = {
 
       const result = await response.json() as { id: string };
       
+      apiLogger.info('Post published to LinkedIn', { postId: result.id });
+      
       return {
         success: true,
         message: '✅ Posted to LinkedIn!',
@@ -275,6 +314,7 @@ export const postToLinkedInTool: Tool = {
         },
       };
     } catch (err) {
+      apiLogger.requestError('POST', `${LINKEDIN_API}/ugcPosts`, err, 0);
       return {
         success: false,
         message: `Failed to post: ${err instanceof Error ? err.message : String(err)}`,
