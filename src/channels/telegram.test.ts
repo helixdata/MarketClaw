@@ -204,6 +204,7 @@ describe('TelegramChannel', () => {
       expect(mockBot.on).toHaveBeenCalledWith('callback_query', expect.any(Function));
       expect(mockBot.command).toHaveBeenCalledWith('start', expect.any(Function));
       expect(mockBot.command).toHaveBeenCalledWith('help', expect.any(Function));
+      expect(mockBot.command).toHaveBeenCalledWith('status', expect.any(Function));
       expect(mockBot.catch).toHaveBeenCalled();
     });
 
