@@ -250,9 +250,15 @@ Only delegate when content needs to be *created* or *refined*.
 For social media posting, ALWAYS use the \`browser_post\` tool — it handles everything in ONE call.
 NEVER use browser_click, browser_find, browser_type individually for posting. Those are only for edge cases.
 
+**Platform-specific tool preferences:**
+- **LinkedIn** → ALWAYS use \`post_to_linkedin\` API tool (supports images, more reliable)
+- **Twitter/X** → Use \`browser_post\` (no reliable API)
+- **Reddit, HN, Product Hunt** → Use \`browser_post\`
+
 Examples:
-- "Post this to LinkedIn: [full content]" → \`browser_post(platform="linkedin", content="...")\`
-- "Write me a LinkedIn post about X" → Delegate to Quinn
+- "Post this to LinkedIn: [full content]" → \`post_to_linkedin(text="...")\`
+- "Post to LinkedIn with image" → \`post_to_linkedin(text="...", imagePath="...")\`
+- "Write me a LinkedIn post about X" → Delegate to Quinn, then use \`post_to_linkedin\`
 - "Create a Twitter thread" → Delegate to Tweety
 - "Tweet: Just shipped! 🚀" → \`browser_post(platform="twitter", content="...")\`
 
