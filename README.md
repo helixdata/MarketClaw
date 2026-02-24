@@ -9,8 +9,15 @@
   <em>Telegram, Discord, Slack — or build your own channel.</em>
 </p>
 
+<p align="center">
+  <a href="https://marketclaw.dev">🌐 marketclaw.dev</a> •
+  <a href="https://www.npmjs.com/package/marketclaw">📦 npm</a> •
+  <a href="https://github.com/helixdata/MarketClaw/discussions">💬 Discussions</a>
+</p>
+
 Build in public, automate your marketing, never forget your campaigns.
 
+[![Website](https://img.shields.io/badge/website-marketclaw.dev-coral)](https://marketclaw.dev)
 [![npm version](https://img.shields.io/npm/v/marketclaw.svg)](https://www.npmjs.com/package/marketclaw)
 [![CI](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/helixdata/MarketClaw/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
