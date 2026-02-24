@@ -458,6 +458,11 @@ marketclaw cron add -s "every day at 9am" -m "Check metrics"
 
 # Config
 marketclaw config
+
+# Logs
+marketclaw logs list    # List log files
+marketclaw logs tail    # View recent logs
+marketclaw logs search "error"  # Search logs
 ```
 
 ---
@@ -477,6 +482,7 @@ marketclaw config
 - [Team](./docs/TEAM.md) — Multi-user roles & permissions
 - [Approvals](./docs/APPROVALS.md) — Content approval workflow
 - [Costs](./docs/COSTS.md) — Cost tracking & budgets
+- [Logging](./docs/LOGGING.md) — Structured logging & debugging
 - [Daemon](./docs/DAEMON.md) — Running as a background service
 - [Tools](./docs/TOOLS.md) — Available tools & how to add more
 - [Skills](./docs/SKILLS.md) — Plugin system
