@@ -166,6 +166,7 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
 
   while (iterations < maxIterations) {
     iterations++;
+    logger.info({ iteration: iterations, maxIterations }, '🔄 Tool loop iteration');
 
     const response = await provider.complete({
       messages: history,
@@ -181,7 +182,9 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
     }
 
     // Handle tool calls
-    logger.info({ toolCalls: response.toolCalls.map(t => t.name) }, 'Executing tools');
+    logger.info({ 
+      toolCalls: response.toolCalls.map(t => ({ name: t.name, args: JSON.stringify(t.arguments).slice(0, 200) })) 
+    }, '🔧 Executing tools');
 
     // Add assistant message with tool calls
     history.push({
@@ -224,7 +227,11 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
         result = await toolRegistry.execute(toolCall.name, toolCall.arguments);
       }
       
-      logger.info({ tool: toolCall.name, success: result.success }, 'Tool executed');
+      logger.info({ 
+        tool: toolCall.name, 
+        success: result.success,
+        message: result.message?.slice(0, 100)
+      }, '✅ Tool executed');
 
       // Check for SEND_IMAGE directive in tool result
       if (result.message && typeof result.message === 'string' && result.message.startsWith('SEND_IMAGE:')) {
