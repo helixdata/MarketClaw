@@ -582,9 +582,82 @@ export class TelegramChannel implements Channel {
         '**Commands:**\n' +
         '/start — Welcome\n' +
         '/help — This message\n' +
-        '/status — Bot status',
+        '/status — Current product & campaign',
         { parse_mode: 'Markdown' }
       );
+    });
+
+    this.bot.command('status', async (ctx) => {
+      try {
+        const { memory } = await import('../memory/index.js');
+        const { costTracker } = await import('../costs/tracker.js');
+        
+        const state = await memory.getState();
+        const lines: string[] = ['🦀 **MarketClaw Status**\n'];
+        
+        // Active product
+        if (state.activeProduct) {
+          const product = await memory.getProduct(state.activeProduct);
+          if (product) {
+            lines.push(`📦 **Product:** ${product.name}`);
+            if (product.tagline) {
+              lines.push(`   _"${product.tagline}"_`);
+            }
+            lines.push('');
+          }
+        } else {
+          const products = await memory.listProducts();
+          if (products.length > 0) {
+            lines.push(`📦 **Products:** ${products.length} configured`);
+            lines.push(`   No active product set`);
+            lines.push('');
+          } else {
+            lines.push('📦 No products configured yet');
+            lines.push('');
+          }
+        }
+        
+        // Active campaign
+        if (state.activeCampaign) {
+          const campaign = await memory.getCampaign(state.activeCampaign);
+          if (campaign) {
+            const postCount = campaign.posts?.length || 0;
+            const scheduledCount = campaign.posts?.filter(p => p.status === 'scheduled').length || 0;
+            lines.push(`📣 **Campaign:** ${campaign.name}`);
+            lines.push(`   Status: ${campaign.status} | ${postCount} posts${scheduledCount > 0 ? ` (${scheduledCount} scheduled)` : ''}`);
+            lines.push('');
+          }
+        } else {
+          const campaigns = state.activeProduct 
+            ? await memory.listCampaigns(state.activeProduct)
+            : [];
+          if (campaigns.length > 0) {
+            lines.push(`📣 **Campaigns:** ${campaigns.length} for this product`);
+            lines.push('');
+          }
+        }
+        
+        // Cost summary (this week)
+        try {
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          const costs = await costTracker.summarize({ from: weekAgo.toISOString() });
+          if (costs.totalUsd > 0) {
+            lines.push(`💰 **Costs:** $${costs.totalUsd.toFixed(2)} this week (${costs.count} ops)`);
+          }
+        } catch {
+          // Cost tracking might not be set up
+        }
+        
+        // Tip
+        lines.push('');
+        lines.push('_Ask me anything or say "switch to [product]"_');
+        
+        await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+      } catch (err) {
+        logger.error({ err }, 'Error in /status command');
+        await ctx.reply('❌ Error fetching status. Try again.');
+      }
     });
 
     // Error handling
