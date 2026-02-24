@@ -70,6 +70,22 @@ export const browserPostTool: Tool = {
       };
     }
 
+    // LinkedIn image posts are not supported via browser - use API instead
+    if (platform === 'linkedin' && params.mediaUrls?.length > 0) {
+      return {
+        success: false,
+        message: `❌ LinkedIn image posts are not supported via browser automation (file picker limitation).
+
+✅ **Use the LinkedIn API instead:**
+The \`post_to_linkedin\` tool supports images via the API.
+
+Example:
+\`post_to_linkedin(text="...", imagePath="/path/to/image.png")\`
+
+This requires a LinkedIn App to be configured. See docs/PROVIDERS.md for setup.`,
+      };
+    }
+
     // Build the command with platform-specific options
     const command: any = {
       action: 'post',
