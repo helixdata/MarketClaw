@@ -131,6 +131,40 @@ For teams, creators can submit content that requires manager/admin approval befo
 
 ## Troubleshooting
 
+### How do I debug issues?
+
+Use the built-in logging system:
+
+**Enable debug mode in chat:**
+```
+/debug on    # Enable verbose logging for this session
+/debug off   # Disable debug logging
+/debug       # Toggle debug mode
+```
+
+**View recent logs:**
+```bash
+marketclaw logs tail        # Last 50 log entries
+marketclaw logs tail -n 100 # Last 100 entries
+```
+
+**Search for errors:**
+```bash
+marketclaw logs search "error"
+marketclaw logs search "" -l error    # Filter by level
+marketclaw logs search "" -c browser  # Filter by component
+```
+
+**Trace a request:**
+Every session gets a correlation ID. Find it in the logs and search:
+```bash
+marketclaw logs search "a1b2c3d4"  # Find all logs for that session
+```
+
+Log files are stored in `~/.marketclaw/logs/` as JSON lines.
+
+See [LOGGING.md](./LOGGING.md) for full documentation.
+
 ### "Tool not found" error
 
 The tool might not be registered or might be disabled. Check:
