@@ -8,6 +8,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { EventEmitter } from 'events';
 import { createServer } from 'http';
+import { createBrowserLogger, type BrowserLogger } from '../logging/index.js';
 
 const DEFAULT_PORT = 7890;
 
@@ -42,11 +43,15 @@ export class ExtensionBridge extends EventEmitter {
     resolve: (value: BridgeResponse) => void;
     reject: (error: Error) => void;
     timeout: NodeJS.Timeout;
+    startTime: number;
+    action: string;
   }> = new Map();
+  private logger: BrowserLogger;
 
   constructor(port: number = DEFAULT_PORT) {
     super();
     this.port = port;
+    this.logger = createBrowserLogger();
   }
 
   /**
@@ -63,11 +68,12 @@ export class ExtensionBridge extends EventEmitter {
         });
 
         this.wss.on('error', (err) => {
+          this.logger.error('WebSocket server error', { error: err.message });
           this.emit('error', err);
         });
 
         server.listen(this.port, () => {
-          console.log(`[ExtensionBridge] WebSocket server listening on port ${this.port}`);
+          this.logger.info('WebSocket server started', { port: this.port });
           this.emit('ready');
           resolve();
         });
@@ -104,25 +110,27 @@ export class ExtensionBridge extends EventEmitter {
    * Handle new WebSocket connection
    */
   private handleConnection(ws: WebSocket): void {
-    console.log('[ExtensionBridge] Client connected');
+    this.logger.info('Client connected');
 
     ws.on('message', (data) => {
       try {
         const message: BridgeMessage = JSON.parse(data.toString());
         this.handleMessage(ws, message);
       } catch (err) {
-        console.error('[ExtensionBridge] Invalid message:', err);
+        this.logger.error('Invalid message received', { 
+          error: err instanceof Error ? err.message : String(err) 
+        });
       }
     });
 
     ws.on('close', () => {
       this.clients.delete(ws);
-      console.log('[ExtensionBridge] Client disconnected');
+      this.logger.info('Client disconnected');
       this.emit('disconnect');
     });
 
     ws.on('error', (err) => {
-      console.error('[ExtensionBridge] Client error:', err);
+      this.logger.error('Client error', { error: err.message });
     });
   }
 
@@ -140,7 +148,11 @@ export class ExtensionBridge extends EventEmitter {
         capabilities: message.capabilities || {},
         connectedAt: new Date(),
       });
-      console.log(`[ExtensionBridge] Client registered: profile="${profile}", version=${message.version}`);
+      this.logger.info('Client registered', { 
+        profile, 
+        version: message.version,
+        capabilities: message.capabilities,
+      });
       this.emit('connect', this.clients.get(ws));
       return;
     }
@@ -151,8 +163,16 @@ export class ExtensionBridge extends EventEmitter {
       if (pending) {
         clearTimeout(pending.timeout);
         this.pendingRequests.delete(message.id);
+        const durationMs = Date.now() - pending.startTime;
+        
+        const success = message.success ?? false;
+        this.logger.commandResponse(pending.action, success, durationMs, {
+          requestId: message.id,
+          error: message.error,
+        });
+        
         pending.resolve({
-          success: message.success ?? false,
+          success,
           message: message.message,
           error: message.error,
           data: message.data,
@@ -175,22 +195,35 @@ export class ExtensionBridge extends EventEmitter {
   async send(command: BridgeMessage, timeoutMs: number = 30000, profile?: string): Promise<BridgeResponse> {
     const client = profile ? this.getClientByProfile(profile) : this.getActiveClient();
     if (!client) {
-      if (profile) {
-        return { success: false, error: `No extension connected for profile "${profile}". Connected profiles: ${this.getConnectedProfiles().join(', ') || 'none'}` };
-      }
-      return { success: false, error: 'No extension connected' };
+      const error = profile 
+        ? `No extension connected for profile "${profile}". Connected profiles: ${this.getConnectedProfiles().join(', ') || 'none'}`
+        : 'No extension connected';
+      this.logger.warn('Cannot send command - no client', { action: command.action, profile, error });
+      return { success: false, error };
     }
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const message = { ...command, id };
+    const action = command.action || 'unknown';
+    const startTime = Date.now();
+
+    this.logger.commandSent(action, { 
+      requestId: id, 
+      profile: client.profile,
+      platform: command.platform,
+    });
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
+        this.logger.commandResponse(action, false, Date.now() - startTime, { 
+          requestId: id, 
+          error: 'Request timeout' 
+        });
         resolve({ success: false, error: 'Request timeout' });
       }, timeoutMs);
 
-      this.pendingRequests.set(id, { resolve, reject, timeout });
+      this.pendingRequests.set(id, { resolve, reject, timeout, startTime, action });
       client.ws.send(JSON.stringify(message));
     });
   }

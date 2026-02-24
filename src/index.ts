@@ -19,15 +19,17 @@ import { teamManager, teamTools, getToolPermission } from './team/index.js';
 import { approvalManager, approvalTools } from './approvals/index.js';
 import { Message, MessageContent, TextContent, ImageContent } from './providers/types.js';
 import { extensionBridge, browserTools } from './browser/index.js';
-import pino from 'pino';
+import { 
+  createStructuredLogger, 
+  createToolLogger, 
+  createToolLoopLogger,
+  generateCorrelationId,
+  setSessionLogLevel,
+  resetSessionLogLevel,
+  type LogLevel,
+} from './logging/index.js';
 
-const logger = pino({
-  name: 'marketclaw',
-  transport: {
-    target: 'pino-pretty',
-    options: { colorize: true },
-  },
-});
+const logger = createStructuredLogger('main');
 
 // Conversation history per user
 const conversationHistory: Map<string, Message[]> = new Map();
@@ -40,8 +42,32 @@ let systemPrompt = DEFAULT_SYSTEM_PROMPT;
  */
 async function handleMessage(channel: Channel, message: ChannelMessage): Promise<ChannelResponse | null> {
   const userId = `${channel.name}:${message.userId}`;
+  const correlationId = generateCorrelationId();
+  const msgLogger = createStructuredLogger('message', correlationId);
   
-  logger.info({ channel: channel.name, userId: message.userId, text: message.text.slice(0, 50) }, 'Processing message');
+  // Handle /debug and /verbose commands
+  if (message.text.startsWith('/debug') || message.text.startsWith('/verbose')) {
+    const parts = message.text.split(' ');
+    const level = parts[1] as LogLevel | undefined;
+    
+    if (level && ['debug', 'info', 'warn', 'error'].includes(level)) {
+      setSessionLogLevel(userId, level);
+      return { text: `🔧 Log level set to ${level.toUpperCase()} for this session.` };
+    } else if (parts[1] === 'off' || parts[1] === 'reset') {
+      resetSessionLogLevel(userId);
+      return { text: `🔧 Log level reset to default.` };
+    } else {
+      setSessionLogLevel(userId, 'debug');
+      return { text: `🔧 Debug mode enabled for this session. Use "/debug off" to disable.` };
+    }
+  }
+  
+  msgLogger.info('Processing message', { 
+    channel: channel.name, 
+    userId: message.userId, 
+    text: message.text.slice(0, 50),
+    hasImages: !!(message.images && message.images.length > 0),
+  });
 
   // Get or create conversation history
   const history = conversationHistory.get(userId) || [];
@@ -89,7 +115,7 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
     }
     
     messageContent = contentParts;
-    logger.info({ userId: message.userId, imageCount: message.images.length }, 'Processing message with images');
+    msgLogger.info('Processing message with images', { imageCount: message.images.length });
   } else {
     // Text-only message
     messageContent = message.text;
@@ -134,7 +160,10 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
         knowledgeContext = await knowledge.buildContext(state.activeProduct, message.text, 3000);
       }
     } catch (err) {
-      logger.warn({ err, productId: state.activeProduct }, 'Failed to build knowledge context');
+      msgLogger.warn('Failed to build knowledge context', { 
+        error: err instanceof Error ? err.message : String(err), 
+        productId: state.activeProduct 
+      });
     }
   }
   
@@ -163,10 +192,13 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   let iterations = 0;
   const maxIterations = 25; // Increased for browser automation tasks
   const pendingImages: string[] = []; // Track images to send from tool results
+  const toolLoopLogger = createToolLoopLogger(correlationId);
+  const toolLogger = createToolLogger(correlationId);
+  const loopStartTime = Date.now();
 
   while (iterations < maxIterations) {
     iterations++;
-    logger.info({ iteration: iterations, maxIterations }, '🔄 Tool loop iteration');
+    toolLoopLogger.iterationStart(iterations, maxIterations);
 
     const response = await provider.complete({
       messages: history,
@@ -178,13 +210,15 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
     if (!response.toolCalls || response.toolCalls.length === 0) {
       finalResponse = response.content;
       history.push({ role: 'assistant', content: response.content });
+      toolLoopLogger.iterationEnd(iterations, 0);
       break;
     }
 
     // Handle tool calls
-    logger.info({ 
-      toolCalls: response.toolCalls.map(t => ({ name: t.name, args: JSON.stringify(t.arguments).slice(0, 200) })) 
-    }, '🔧 Executing tools');
+    toolLoopLogger.iterationEnd(iterations, response.toolCalls.length);
+    msgLogger.debug('Executing tools', { 
+      toolCalls: response.toolCalls.map(t => ({ name: t.name, argsPreview: JSON.stringify(t.arguments).slice(0, 200) })) 
+    });
 
     // Add assistant message with tool calls
     history.push({
@@ -195,9 +229,13 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
 
     // Execute each tool and add results
     for (const toolCall of response.toolCalls) {
+      const toolStartTime = Date.now();
+      
       // Check permission for this tool
       const requiredPerm = getToolPermission(toolCall.name);
       let result;
+      
+      toolLogger.toolStart(toolCall.name, toolCall.arguments);
       
       if (requiredPerm) {
         // Build lookup based on channel type
@@ -218,7 +256,12 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
             success: false,
             message: `🚫 Permission denied. You need '${requiredPerm}' permission to use ${toolCall.name}.`,
           };
-          logger.warn({ tool: toolCall.name, userId: message.userId, channel: channel.name, requiredPerm }, 'Permission denied');
+          toolLogger.warn('Permission denied', { 
+            tool: toolCall.name, 
+            userId: message.userId, 
+            channel: channel.name, 
+            requiredPerm 
+          });
         } else {
           result = await toolRegistry.execute(toolCall.name, toolCall.arguments);
         }
@@ -227,18 +270,20 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
         result = await toolRegistry.execute(toolCall.name, toolCall.arguments);
       }
       
-      logger.info({ 
-        tool: toolCall.name, 
-        success: result.success,
-        message: result.message?.slice(0, 100)
-      }, '✅ Tool executed');
+      const toolDurationMs = Date.now() - toolStartTime;
+      
+      if (result.success) {
+        toolLogger.toolEnd(toolCall.name, result, toolDurationMs);
+      } else {
+        toolLogger.toolError(toolCall.name, result.message || 'Unknown error', toolDurationMs);
+      }
 
       // Check for SEND_IMAGE directive in tool result
       if (result.message && typeof result.message === 'string' && result.message.startsWith('SEND_IMAGE:')) {
         const imagePath = result.message.replace('SEND_IMAGE:', '');
         if (existsSync(imagePath)) {
           pendingImages.push(imagePath);
-          logger.info({ imagePath }, 'Image queued for sending');
+          msgLogger.debug('Image queued for sending', { imagePath });
         }
       }
 
@@ -251,8 +296,11 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   }
 
   if (!finalResponse && iterations >= maxIterations) {
+    toolLoopLogger.maxIterationsReached(iterations);
     finalResponse = '⚠️ Reached maximum tool iterations. Please try a simpler request.';
   }
+  
+  toolLoopLogger.loopComplete(iterations, Date.now() - loopStartTime);
 
   conversationHistory.set(userId, history);
 
@@ -260,7 +308,13 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   await memory.appendToSession(userId, { role: 'user', content: message.text });
   await memory.appendToSession(userId, { role: 'assistant', content: finalResponse });
 
-  logger.info({ channel: channel.name, userId: message.userId, iterations, pendingImages: pendingImages.length }, 'Response ready');
+  msgLogger.info('Response ready', { 
+    channel: channel.name, 
+    userId: message.userId, 
+    iterations, 
+    pendingImages: pendingImages.length,
+    responseLengthChars: finalResponse.length,
+  });
 
   // Build response with any pending images as attachments
   const response: ChannelResponse = { text: finalResponse };
@@ -284,9 +338,12 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
           filename,
           mimeType: mimeTypes[ext] || 'image/png',
         });
-        logger.info({ filename }, 'Image attached to response');
+        msgLogger.debug('Image attached to response', { filename });
       } catch (err) {
-        logger.error({ err, imagePath }, 'Failed to read image for attachment');
+        msgLogger.error('Failed to read image for attachment', { 
+          error: err instanceof Error ? err.message : String(err), 
+          imagePath 
+        });
       }
     }
   }
@@ -376,7 +433,7 @@ export async function startAgent(): Promise<void> {
 
   // Load config
   const config = await loadConfig();
-  logger.info({ configLoaded: true }, 'Configuration loaded');
+  logger.info('Configuration loaded');
 
   // Set system prompt (use custom if provided, otherwise build from agent config)
   systemPrompt = config.agent?.systemPrompt || buildSystemPrompt(config.agent);
@@ -393,31 +450,31 @@ export async function startAgent(): Promise<void> {
       oauthToken: credentials.accessToken,
       model: config.providers?.anthropic?.model || config.providers?.openai?.model,
     });
-    logger.info({ provider: defaultProvider }, 'Provider initialized');
+    logger.info('Provider initialized', { provider: defaultProvider });
   } else {
     logger.warn('No provider credentials found. Run: marketclaw setup');
   }
 
   // Initialize tools
   await initializeTools();
-  logger.info({ tools: toolRegistry.count }, 'Tools initialized');
+  logger.info('Tools initialized', { count: toolRegistry.count });
 
   // Initialize skills system
   await initializeSkills(config as any);
-  logger.info({ tools: toolRegistry.count }, 'Skills initialized');
+  logger.info('Skills initialized', { totalTools: toolRegistry.count });
 
   // Initialize sub-agents
   await initializeAgents(config.agents as any);
   toolRegistry.registerAll(agentTools, { category: 'utility' });
   const enabledAgents = subAgentRegistry.listEnabled();
-  logger.info({ agents: enabledAgents.length }, 'Sub-agents initialized');
+  logger.info('Sub-agents initialized', { count: enabledAgents.length });
 
   // Initialize team management
   const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
   await teamManager.init(adminUsers[0]);
   toolRegistry.registerAll(teamTools, { category: 'utility' });
   const teamMembers = teamManager.listMembers();
-  logger.info({ members: teamMembers.length }, 'Team initialized');
+  logger.info('Team initialized', { members: teamMembers.length });
 
   // Initialize approval workflow
   await approvalManager.init();
@@ -428,10 +485,10 @@ export async function startAgent(): Promise<void> {
   
   // Add error listener BEFORE starting to prevent unhandled error crashes
   extensionBridge.on('error', (err: any) => {
-    logger.warn({ err: err.message || err }, 'Browser extension bridge error (non-fatal)');
+    logger.warn('Browser extension bridge error (non-fatal)', { error: err.message || err });
   });
   extensionBridge.on('connect', (client) => {
-    logger.info({ version: client.version, capabilities: client.capabilities }, 'Browser extension connected');
+    logger.info('Browser extension connected', { version: client.version, capabilities: client.capabilities });
   });
   extensionBridge.on('disconnect', () => {
     logger.info('Browser extension disconnected');
@@ -439,9 +496,9 @@ export async function startAgent(): Promise<void> {
   
   try {
     await extensionBridge.start();
-    logger.info({ port: 7890 }, 'Browser extension bridge started');
+    logger.info('Browser extension bridge started', { port: 7890 });
   } catch (err: any) {
-    logger.warn({ err: err.message || err }, 'Browser extension bridge failed to start (non-fatal, browser automation disabled)');
+    logger.warn('Browser extension bridge failed to start (non-fatal, browser automation disabled)', { error: err.message || err });
   }
   
   // Set up approval notifications
@@ -462,14 +519,17 @@ export async function startAgent(): Promise<void> {
           try {
             await channel.send(String(approver.telegramId), { text: message });
           } catch (err) {
-            logger.error({ err, approverId: approver.id }, 'Failed to notify approver');
+            logger.error('Failed to notify approver', { 
+              error: err instanceof Error ? err.message : String(err), 
+              approverId: approver.id 
+            });
           }
         }
       }
     }
   });
   
-  logger.info({ pending: approvalManager.listPending().length }, 'Approvals initialized');
+  logger.info('Approvals initialized', { pending: approvalManager.listPending().length });
 
   // Set up message handler
   channelRegistry.setMessageHandler(handleMessage);
@@ -493,10 +553,13 @@ export async function startAgent(): Promise<void> {
       try {
         await channelRegistry.configure(name, channelConfig as any);
         if ((channelConfig as any).enabled) {
-          logger.info({ channel: name }, 'Channel configured');
+          logger.info('Channel configured', { channel: name });
         }
       } catch (err) {
-        logger.error({ err, channel: name }, 'Failed to configure channel');
+        logger.error('Failed to configure channel', { 
+          error: err instanceof Error ? err.message : String(err), 
+          channel: name 
+        });
       }
     }
   }
@@ -510,7 +573,8 @@ export async function startAgent(): Promise<void> {
 
   // Initialize scheduler
   scheduler.on('job:execute', async (job) => {
-    logger.info({ jobId: job.id, type: job.type }, 'Executing scheduled job');
+    const jobLogger = createStructuredLogger('scheduler');
+    jobLogger.info('Executing scheduled job', { jobId: job.id, type: job.type });
     
     // Get first enabled channel for notifications
     const notifyChannel = enabledChannels[0];
@@ -525,7 +589,10 @@ export async function startAgent(): Promise<void> {
             text: `⏰ **Reminder**\n\n${job.payload.content}` 
           });
         } catch (err) {
-          logger.error({ err, userId }, 'Failed to send reminder');
+          jobLogger.error('Failed to send reminder', { 
+            error: err instanceof Error ? err.message : String(err), 
+            userId 
+          });
         }
       }
     } else if (job.type === 'post') {
@@ -536,12 +603,19 @@ export async function startAgent(): Promise<void> {
             text: `📤 **Scheduled Post Due**\n\nChannel: ${job.payload.channel}\nContent:\n${job.payload.content}`,
           });
         } catch (err) {
-          logger.error({ err, userId }, 'Failed to send post notification');
+          jobLogger.error('Failed to send post notification', { 
+            error: err instanceof Error ? err.message : String(err), 
+            userId 
+          });
         }
       }
     } else if (job.type === 'task' && job.payload.content) {
       // Execute automated task with AI
-      logger.info({ jobId: job.id, task: job.payload.content.slice(0, 50) }, 'Executing automated task');
+      const taskStartTime = Date.now();
+      jobLogger.info('Executing automated task', { 
+        jobId: job.id, 
+        taskPreview: job.payload.content.slice(0, 50) 
+      });
       
       try {
         const result = await executeTask(job.payload.content, {
@@ -560,14 +634,25 @@ export async function startAgent(): Promise<void> {
                 text: `🤖 **Automated Task Completed**\n\n**Task:** ${job.name}\n\n**Result:**\n${result.slice(0, 1500)}${result.length > 1500 ? '...' : ''}`,
               });
             } catch (err) {
-              logger.error({ err, userId }, 'Failed to send task notification');
+              jobLogger.error('Failed to send task notification', { 
+                error: err instanceof Error ? err.message : String(err), 
+                userId 
+              });
             }
           }
         }
         
-        logger.info({ jobId: job.id, resultLength: result.length }, 'Task completed');
+        jobLogger.info('Task completed', { 
+          jobId: job.id, 
+          resultLength: result.length,
+          durationMs: Date.now() - taskStartTime,
+        });
       } catch (err) {
-        logger.error({ err, jobId: job.id }, 'Task execution failed');
+        jobLogger.error('Task execution failed', { 
+          error: err instanceof Error ? err.message : String(err), 
+          jobId: job.id,
+          durationMs: Date.now() - taskStartTime,
+        });
         
         // Notify user of failure
         const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
@@ -577,7 +662,10 @@ export async function startAgent(): Promise<void> {
               text: `⚠️ **Automated Task Failed**\n\n**Task:** ${job.name}\n**Error:** ${err}`,
             });
           } catch (notifyErr) {
-            logger.error({ err: notifyErr, userId }, 'Failed to send error notification');
+            jobLogger.error('Failed to send error notification', { 
+              error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr), 
+              userId 
+            });
           }
         }
       }
@@ -585,7 +673,7 @@ export async function startAgent(): Promise<void> {
   });
 
   await scheduler.load();
-  logger.info({ jobs: scheduler.listJobs().length }, 'Scheduler loaded');
+  logger.info('Scheduler loaded', { jobs: scheduler.listJobs().length });
 
   // Handle async sub-agent task completion notifications
   subAgentRegistry.on('task:complete', async (task) => {
@@ -612,17 +700,25 @@ export async function startAgent(): Promise<void> {
       try {
         await notifyChannel.send(String(userId), { text: message });
       } catch (err) {
-        logger.error({ err, userId, taskId: task.id }, 'Failed to send task completion notification');
+        logger.error('Failed to send task completion notification', { 
+          error: err instanceof Error ? err.message : String(err), 
+          userId, 
+          taskId: task.id 
+        });
       }
     }
     
-    logger.info({ taskId: task.id, agentId: task.agentId, status: task.status }, 'Sent task completion notification');
+    logger.info('Sent task completion notification', { 
+      taskId: task.id, 
+      agentId: task.agentId, 
+      status: task.status 
+    });
   });
 
   // Start all enabled channels
   await channelRegistry.startAll();
   
-  logger.info({ channels: enabledChannels.map(c => c.name) }, '🦀 MarketClaw is running!');
+  logger.info('🦀 MarketClaw is running!', { channels: enabledChannels.map(c => c.name) });
   logger.info('Press Ctrl+C to stop');
 
   // Graceful shutdown

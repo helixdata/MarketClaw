@@ -554,6 +554,186 @@ skillCmd
     }
   });
 
+// Logs commands
+const logs = program.command('logs').description('View and manage logs');
+
+logs
+  .command('tail')
+  .description('Tail the log file')
+  .option('-n, --lines <n>', 'Number of lines to show', '50')
+  .option('-f, --file <filename>', 'Specific log file to tail')
+  .option('--json', 'Output raw JSON (no formatting)')
+  .action(async (options) => {
+    const { tailLogFile, LOG_DIRECTORY } = await import('./logging/index.js');
+    
+    const lines = tailLogFile(options.file, parseInt(options.lines));
+    
+    if (lines.length === 0) {
+      console.log(chalk.yellow('No log entries found.'));
+      console.log(chalk.gray(`Log directory: ${LOG_DIRECTORY}`));
+      return;
+    }
+    
+    for (const line of lines) {
+      if (options.json) {
+        console.log(line);
+      } else {
+        try {
+          const log = JSON.parse(line);
+          const level = (log.level || 'INFO') as string;
+          const levelColors: Record<string, typeof chalk.white> = {
+            DEBUG: chalk.gray,
+            INFO: chalk.cyan,
+            WARN: chalk.yellow,
+            ERROR: chalk.red,
+          };
+          const levelColor = levelColors[level] || chalk.white;
+          
+          const time = log.time ? new Date(log.time).toLocaleTimeString() : '';
+          const component = log.component ? chalk.magenta(`[${log.component}]`) : '';
+          const correlationId = log.correlationId ? chalk.gray(`(${log.correlationId})`) : '';
+          
+          // Build message from remaining fields
+          const msg = log.msg || '';
+          const extra: string[] = [];
+          for (const [key, value] of Object.entries(log)) {
+            if (!['time', 'level', 'component', 'correlationId', 'msg', 'name'].includes(key)) {
+              extra.push(`${key}=${JSON.stringify(value)}`);
+            }
+          }
+          
+          console.log(
+            `${chalk.gray(time)} ${levelColor(level.padEnd(5))} ${component} ${correlationId} ${msg} ${chalk.gray(extra.join(' '))}`
+          );
+        } catch {
+          console.log(line);
+        }
+      }
+    }
+  });
+
+logs
+  .command('list')
+  .description('List log files')
+  .action(async () => {
+    const { listLogFiles, LOG_DIRECTORY } = await import('./logging/index.js');
+    
+    const files = listLogFiles();
+    
+    console.log(chalk.cyan(`Log Directory: ${LOG_DIRECTORY}\n`));
+    
+    if (files.length === 0) {
+      console.log(chalk.yellow('No log files found.'));
+      return;
+    }
+    
+    console.log(chalk.cyan('Log Files:\n'));
+    for (const file of files) {
+      const sizeKb = (file.size / 1024).toFixed(1);
+      console.log(`  ${chalk.yellow(file.name)}`);
+      console.log(`    Size: ${sizeKb} KB, Modified: ${file.modified.toLocaleString()}`);
+    }
+  });
+
+logs
+  .command('search <query>')
+  .description('Search logs for a string')
+  .option('-l, --level <level>', 'Filter by level (debug, info, warn, error)')
+  .option('-c, --component <component>', 'Filter by component')
+  .option('-n, --limit <n>', 'Max results', '50')
+  .option('--json', 'Output raw JSON')
+  .action(async (query, options) => {
+    const { searchLogs } = await import('./logging/index.js');
+    
+    const results = searchLogs(query, {
+      level: options.level,
+      component: options.component,
+      limit: parseInt(options.limit),
+    });
+    
+    if (results.length === 0) {
+      console.log(chalk.yellow(`No results for "${query}"`));
+      return;
+    }
+    
+    console.log(chalk.cyan(`Found ${results.length} result(s):\n`));
+    
+    for (const line of results) {
+      if (options.json) {
+        console.log(line);
+      } else {
+        try {
+          const log = JSON.parse(line);
+          const level = (log.level || 'INFO') as string;
+          const levelColors: Record<string, typeof chalk.white> = {
+            DEBUG: chalk.gray,
+            INFO: chalk.cyan,
+            WARN: chalk.yellow,
+            ERROR: chalk.red,
+          };
+          const levelColor = levelColors[level] || chalk.white;
+          
+          console.log(`${levelColor(level)} ${chalk.magenta(`[${log.component || 'main'}]`)} ${log.msg || ''}`);
+          
+          // Show context that matches the query
+          for (const [key, value] of Object.entries(log)) {
+            if (!['time', 'level', 'component', 'msg', 'name'].includes(key)) {
+              const str = JSON.stringify(value);
+              if (str.toLowerCase().includes(query.toLowerCase())) {
+                console.log(chalk.gray(`  ${key}: ${str}`));
+              }
+            }
+          }
+        } catch {
+          console.log(line);
+        }
+      }
+    }
+  });
+
+logs
+  .command('rotate')
+  .description('Delete old log files')
+  .option('-d, --days <n>', 'Keep logs newer than N days', '7')
+  .option('-y, --yes', 'Skip confirmation')
+  .action(async (options) => {
+    const { rotateOldLogs, listLogFiles } = await import('./logging/index.js');
+    const { createInterface } = await import('readline');
+    
+    const days = parseInt(options.days);
+    const files = listLogFiles();
+    const now = Date.now();
+    const maxAge = days * 24 * 60 * 60 * 1000;
+    
+    const toDelete = files.filter(f => now - f.modified.getTime() > maxAge);
+    
+    if (toDelete.length === 0) {
+      console.log(chalk.green(`No logs older than ${days} days.`));
+      return;
+    }
+    
+    console.log(chalk.yellow(`Will delete ${toDelete.length} log file(s):`));
+    for (const f of toDelete) {
+      console.log(`  - ${f.name}`);
+    }
+    
+    if (!options.yes) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>(resolve => {
+        rl.question('\nProceed? [y/N] ', resolve);
+      });
+      rl.close();
+      
+      if (answer.toLowerCase() !== 'y') {
+        console.log(chalk.gray('Cancelled.'));
+        return;
+      }
+    }
+    
+    const deleted = await rotateOldLogs(days);
+    console.log(chalk.green(`✓ Deleted ${deleted} log file(s).`));
+  });
+
 // Update command
 program
   .command('update')
