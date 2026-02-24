@@ -5,6 +5,8 @@
 
 import { Tool, ToolResult } from './types.js';
 import { execSync } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 
 // LinkedIn API base
 const LINKEDIN_API = 'https://api.linkedin.com/v2';
@@ -38,6 +40,82 @@ async function getLinkedInToken(): Promise<string | null> {
 // LinkedIn user URN (from TOOLS.md)
 const USER_URN = 'urn:li:person:vuzryA4D9-';
 
+/**
+ * Upload an image to LinkedIn and get the asset URN
+ */
+async function uploadImageToLinkedIn(token: string, imagePath: string): Promise<{ success: boolean; assetUrn?: string; error?: string }> {
+  try {
+    // Read the image file
+    if (!existsSync(imagePath)) {
+      return { success: false, error: `Image file not found: ${imagePath}` };
+    }
+    
+    const imageBuffer = readFileSync(imagePath);
+    const fileSize = imageBuffer.length;
+    
+    // Step 1: Register the upload
+    const registerPayload = {
+      registerUploadRequest: {
+        recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+        owner: USER_URN,
+        serviceRelationships: [{
+          relationshipType: 'OWNER',
+          identifier: 'urn:li:userGeneratedContent',
+        }],
+      },
+    };
+    
+    const registerResponse = await fetch(`${LINKEDIN_API}/assets?action=registerUpload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(registerPayload),
+    });
+    
+    if (!registerResponse.ok) {
+      const error = await registerResponse.text();
+      return { success: false, error: `Failed to register upload: ${error}` };
+    }
+    
+    const registerResult = await registerResponse.json() as {
+      value: {
+        uploadMechanism: {
+          'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest': {
+            uploadUrl: string;
+            headers: Record<string, string>;
+          };
+        };
+        asset: string;
+      };
+    };
+    
+    const uploadUrl = registerResult.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+    const assetUrn = registerResult.value.asset;
+    
+    // Step 2: Upload the image binary
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': fileSize.toString(),
+      },
+      body: imageBuffer,
+    });
+    
+    if (!uploadResponse.ok) {
+      const error = await uploadResponse.text();
+      return { success: false, error: `Failed to upload image: ${error}` };
+    }
+    
+    return { success: true, assetUrn };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // Reserved for future typed post creation
 interface _LinkedInPost {
   text: string;
@@ -51,7 +129,7 @@ interface _LinkedInPost {
 // ============ Post to LinkedIn ============
 export const postToLinkedInTool: Tool = {
   name: 'post_to_linkedin',
-  description: 'Publish a post to LinkedIn. Supports text posts, link shares, and images.',
+  description: 'Publish a post to LinkedIn. Supports text posts, link shares, AND images. For image posts, provide imagePath to a local file.',
   parameters: {
     type: 'object',
     properties: {
@@ -59,9 +137,13 @@ export const postToLinkedInTool: Tool = {
         type: 'string', 
         description: 'Post content (supports mentions with @[Name](urn:li:person:xxx))' 
       },
+      imagePath: {
+        type: 'string',
+        description: 'Path to local image file to upload (jpg, png, gif). The image will be uploaded to LinkedIn and attached to the post.'
+      },
       linkUrl: { 
         type: 'string', 
-        description: 'URL to share (optional)' 
+        description: 'URL to share (optional, cannot combine with image)' 
       },
       linkTitle: { 
         type: 'string', 
@@ -100,6 +182,7 @@ export const postToLinkedInTool: Tool = {
         message: 'Preview (not posted):',
         data: {
           text: params.text,
+          imagePath: params.imagePath,
           linkUrl: params.linkUrl,
           visibility: params.visibility || 'PUBLIC',
           characterCount: params.text.length,
@@ -108,6 +191,27 @@ export const postToLinkedInTool: Tool = {
     }
 
     try {
+      // Upload image if provided
+      let imageAssetUrn: string | undefined;
+      if (params.imagePath) {
+        const uploadResult = await uploadImageToLinkedIn(token, params.imagePath);
+        if (!uploadResult.success) {
+          return {
+            success: false,
+            message: `Failed to upload image: ${uploadResult.error}`,
+          };
+        }
+        imageAssetUrn = uploadResult.assetUrn;
+      }
+      
+      // Determine media category
+      let mediaCategory = 'NONE';
+      if (imageAssetUrn) {
+        mediaCategory = 'IMAGE';
+      } else if (params.linkUrl) {
+        mediaCategory = 'ARTICLE';
+      }
+      
       // Build UGC Post payload
       const payload: any = {
         author: USER_URN,
@@ -117,7 +221,7 @@ export const postToLinkedInTool: Tool = {
             shareCommentary: {
               text: params.text,
             },
-            shareMediaCategory: params.linkUrl ? 'ARTICLE' : 'NONE',
+            shareMediaCategory: mediaCategory,
           },
         },
         visibility: {
@@ -125,8 +229,15 @@ export const postToLinkedInTool: Tool = {
         },
       };
 
-      // Add link if provided
-      if (params.linkUrl) {
+      // Add image if uploaded
+      if (imageAssetUrn) {
+        payload.specificContent['com.linkedin.ugc.ShareContent'].media = [{
+          status: 'READY',
+          media: imageAssetUrn,
+        }];
+      }
+      // Add link if provided (and no image)
+      else if (params.linkUrl) {
         payload.specificContent['com.linkedin.ugc.ShareContent'].media = [{
           status: 'READY',
           originalUrl: params.linkUrl,
