@@ -41,6 +41,7 @@ function delay(ms) {
 
 /**
  * Type text into an element naturally
+ * Handles newlines properly for Draft.js editors
  */
 async function typeText(element, text) {
   element.focus();
@@ -57,9 +58,29 @@ async function typeText(element, text) {
   document.execCommand('delete', false, null);
   await delay(50);
   
-  // Insert text using execCommand (works with Draft.js)
-  // Don't dispatch extra events - let Draft.js handle it
-  document.execCommand('insertText', false, text);
+  // Split by newlines and insert with proper line breaks
+  // Draft.js doesn't handle \n in insertText well
+  const lines = text.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Insert the line text
+    if (line) {
+      document.execCommand('insertText', false, line);
+    }
+    
+    // Insert line break after each line except the last
+    if (i < lines.length - 1) {
+      // Use insertParagraph for new lines in Draft.js
+      document.execCommand('insertParagraph', false, null);
+    }
+    
+    // Small delay between lines to let Draft.js process
+    if (lines.length > 1) {
+      await delay(20);
+    }
+  }
 }
 
 /**
