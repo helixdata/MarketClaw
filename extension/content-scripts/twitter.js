@@ -11,6 +11,109 @@ let lastPostContent = '';
 let lastPostTime = 0;
 
 /**
+ * Upload an image to the tweet composer via clipboard paste
+ */
+async function uploadImage(editableDiv, imageUrl) {
+  try {
+    console.log('[MarketClaw] Uploading image:', imageUrl);
+    
+    // Fetch the image
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    
+    const blob = await response.blob();
+    console.log('[MarketClaw] Image fetched:', blob.type, blob.size, 'bytes');
+    
+    // Create a file from the blob
+    const filename = imageUrl.split('/').pop() || 'image.jpg';
+    const file = new File([blob], filename, { type: blob.type });
+    
+    // Method 1: Try clipboard paste with image
+    try {
+      const clipboardData = new DataTransfer();
+      clipboardData.items.add(file);
+      
+      const pasteEvent = new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: clipboardData
+      });
+      
+      editableDiv.focus();
+      editableDiv.dispatchEvent(pasteEvent);
+      await delay(500);
+      
+      // Check if image appeared (look for image preview)
+      const imagePreview = document.querySelector('[data-testid="attachments"]') ||
+                          document.querySelector('[data-testid="photoHolder"]') ||
+                          document.querySelector('img[src*="blob:"]');
+      
+      if (imagePreview) {
+        console.log('[MarketClaw] Image uploaded via paste');
+        return true;
+      }
+    } catch (e) {
+      console.log('[MarketClaw] Paste method failed:', e.message);
+    }
+    
+    // Method 2: Try drag and drop
+    try {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      
+      const dropEvent = new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer
+      });
+      
+      editableDiv.dispatchEvent(dropEvent);
+      await delay(500);
+      
+      const imagePreview = document.querySelector('[data-testid="attachments"]') ||
+                          document.querySelector('[data-testid="photoHolder"]');
+      
+      if (imagePreview) {
+        console.log('[MarketClaw] Image uploaded via drop');
+        return true;
+      }
+    } catch (e) {
+      console.log('[MarketClaw] Drop method failed:', e.message);
+    }
+    
+    // Method 3: Try clicking the media button and using file input
+    try {
+      const mediaButton = document.querySelector('[data-testid="fileInput"]') ||
+                         document.querySelector('input[type="file"][accept*="image"]');
+      
+      if (mediaButton) {
+        // Create a new FileList-like object
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        mediaButton.files = dt.files;
+        
+        mediaButton.dispatchEvent(new Event('change', { bubbles: true }));
+        await delay(500);
+        
+        console.log('[MarketClaw] Image uploaded via file input');
+        return true;
+      }
+    } catch (e) {
+      console.log('[MarketClaw] File input method failed:', e.message);
+    }
+    
+    console.log('[MarketClaw] All image upload methods failed');
+    return false;
+    
+  } catch (err) {
+    console.log('[MarketClaw] Image upload error:', err.message);
+    return false;
+  }
+}
+
+/**
  * Wait for an element to appear
  */
 function waitForElement(selector, timeout = 10000) {
@@ -233,6 +336,19 @@ async function postTweet(content, mediaUrls = []) {
     // Type the content
     await typeText(editableDiv, content);
     await delay(500);
+    
+    // Upload images if provided
+    if (mediaUrls && mediaUrls.length > 0) {
+      console.log('[MarketClaw] Uploading', mediaUrls.length, 'images');
+      for (const imageUrl of mediaUrls) {
+        const success = await uploadImage(editableDiv, imageUrl);
+        if (success) {
+          await delay(1000); // Wait for image to process
+        } else {
+          console.log('[MarketClaw] Warning: Failed to upload image:', imageUrl);
+        }
+      }
+    }
     
     // Find and click the post button
     const postButtonSelectors = [
