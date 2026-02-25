@@ -6,6 +6,10 @@
 
 console.log('[MarketClaw] Twitter content script loaded');
 
+// Prevent duplicate posts
+let lastPostContent = '';
+let lastPostTime = 0;
+
 /**
  * Wait for an element to appear
  */
@@ -40,16 +44,22 @@ function delay(ms) {
  */
 async function typeText(element, text) {
   element.focus();
+  await delay(100);
   
-  // Clear existing content
-  document.execCommand('selectAll', false, null);
+  // Clear existing content first
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
   
-  // Insert text
+  // Delete any existing content
+  document.execCommand('delete', false, null);
+  await delay(50);
+  
+  // Insert text using execCommand (works with Draft.js)
+  // Don't dispatch extra events - let Draft.js handle it
   document.execCommand('insertText', false, text);
-  
-  // Trigger input events
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /**
@@ -107,6 +117,15 @@ async function dismissModals() {
  */
 async function postTweet(content, mediaUrls = []) {
   try {
+    // Prevent duplicate posts (same content within 5 seconds)
+    const now = Date.now();
+    if (content === lastPostContent && now - lastPostTime < 5000) {
+      console.log('[MarketClaw] Ignoring duplicate post request');
+      return { success: false, error: 'Duplicate post request ignored' };
+    }
+    lastPostContent = content;
+    lastPostTime = now;
+    
     // First, dismiss any modals that might be in the way
     await dismissModals();
     
@@ -214,25 +233,33 @@ async function postTweet(content, mediaUrls = []) {
 }
 
 /**
- * Listen for post commands from background script
+ * Listen for post commands from background script (prevent duplicate registration)
  */
-window.addEventListener('marketclaw:post', async (event) => {
-  const { content, mediaUrls } = event.detail;
+if (!window._marketClawTwitterEventRegistered) {
+  window._marketClawTwitterEventRegistered = true;
   
-  console.log('[MarketClaw] Posting tweet:', content.substring(0, 50) + '...');
-  
-  const result = await postTweet(content, mediaUrls);
-  
-  // Send result back
-  window.dispatchEvent(new CustomEvent('marketclaw:postResult', {
-    detail: result
-  }));
-});
+  window.addEventListener('marketclaw:post', async (event) => {
+    const { content, mediaUrls } = event.detail;
+    
+    console.log('[MarketClaw] Posting tweet:', content.length, 'chars:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
+    
+    const result = await postTweet(content, mediaUrls);
+    
+    // Send result back
+    window.dispatchEvent(new CustomEvent('marketclaw:postResult', {
+      detail: result
+    }));
+  });
+}
 
-// Also listen for direct messages from extension
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'post') {
-    postTweet(message.content, message.mediaUrls).then(sendResponse);
-    return true; // Async response
-  }
-});
+// Also listen for direct messages from extension (prevent duplicate registration)
+if (!window._marketClawTwitterListenerRegistered) {
+  window._marketClawTwitterListenerRegistered = true;
+  
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'post') {
+      postTweet(message.content, message.mediaUrls).then(sendResponse);
+      return true; // Async response
+    }
+  });
+}
