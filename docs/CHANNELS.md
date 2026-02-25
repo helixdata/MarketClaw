@@ -25,7 +25,7 @@ MarketClaw uses a modular channel system for interacting with users across diffe
 |---------|--------|-------------|
 | Telegram | ✅ Ready | Full-featured Telegram bot |
 | Discord | ✅ Ready | Full-featured Discord bot with server/channel/role restrictions |
-| Slack | 🚧 Stub | Bolt app ready |
+| Slack | ✅ Ready | Full-featured Slack bot via Socket Mode |
 | CLI | ✅ Ready | Local command-line testing |
 
 All channels share the same agent, memory, and tools — only the interface differs.
@@ -193,6 +193,62 @@ export { whatsappChannel } from './whatsapp.js';
 Right-click on servers/channels/roles in Discord with Developer Mode enabled:
 - Enable Developer Mode: User Settings → Advanced → Developer Mode
 - Right-click → "Copy ID"
+
+## Slack Setup
+
+1. **Create a Slack App:**
+   - Go to https://api.slack.com/apps
+   - Click "Create New App" → "From scratch"
+   - Give it a name and select your workspace
+
+2. **Enable Socket Mode:**
+   - Go to "Socket Mode" in the sidebar
+   - Toggle it ON
+   - Create an App-Level Token with `connections:write` scope
+   - Copy the token (starts with `xapp-`)
+
+3. **Add Bot Token Scopes:**
+   - Go to "OAuth & Permissions"
+   - Under "Bot Token Scopes", add:
+     - `chat:write` (send messages)
+     - `app_mentions:read` (respond to @mentions)
+     - `im:history` (read DMs)
+     - `im:read` (access DM channels)
+     - `channels:history` (read channel messages, if needed)
+
+4. **Enable Events:**
+   - Go to "Event Subscriptions"
+   - Toggle ON
+   - Subscribe to bot events:
+     - `app_mention` (respond to @mentions)
+     - `message.im` (respond to DMs)
+
+5. **Install to Workspace:**
+   - Go to "Install App"
+   - Click "Install to Workspace"
+   - Copy the Bot User OAuth Token (starts with `xoxb-`)
+
+6. **Configure MarketClaw:**
+   ```yaml
+   # ~/.marketclaw/config.yaml
+   slack:
+     botToken: "xoxb-your-bot-token"
+     appToken: "xapp-your-app-token"
+     # Optional restrictions:
+     allowedChannels: ["C123456"]  # Limit to specific channels
+     allowedUsers: ["U123456"]     # Limit to specific users
+   ```
+
+7. **Start MarketClaw** — the Slack bot will connect via Socket Mode!
+
+### Slack Features
+
+- Responds to @mentions in channels
+- Responds to DMs
+- Thread support
+- Image attachments
+- Document attachments (PDF, DOCX, etc.)
+- Channel/user restrictions
 
 ## Telegram Setup
 
