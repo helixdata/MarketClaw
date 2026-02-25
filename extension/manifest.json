@@ -16,6 +16,9 @@
     "https://www.linkedin.com/*",
     "https://www.instagram.com/*",
     "https://www.facebook.com/*",
+    "https://facebook.com/*",
+    "https://web.facebook.com/*",
+    "https://m.facebook.com/*",
     "https://www.reddit.com/*",
     "https://old.reddit.com/*",
     "https://news.ycombinator.com/*",
@@ -74,7 +77,7 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.facebook.com/*"],
+      "matches": ["https://www.facebook.com/*", "https://facebook.com/*", "https://web.facebook.com/*"],
       "js": ["content-scripts/facebook.js"],
       "run_at": "document_idle"
     },

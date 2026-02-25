@@ -60,19 +60,34 @@ async function dismissModals() {
     '[data-testid="sheetDialog"] button', // Generic sheet dialog
     '[role="dialog"] button[type="button"]', // Dialog buttons
     'div[data-testid="confirmationSheetConfirm"]', // Confirmation buttons
-    'button:has-text("Got it")', // "Got it" buttons
   ];
   
   for (const selector of modalSelectors) {
-    const buttons = document.querySelectorAll(selector);
-    for (const btn of buttons) {
-      const text = btn.textContent?.toLowerCase() || '';
-      if (text.includes('got it') || text.includes('dismiss') || text.includes('close') || text.includes('not now')) {
-        console.log('[MarketClaw] Dismissing modal:', text);
-        btn.click();
-        await delay(500);
-        return true;
+    try {
+      const buttons = document.querySelectorAll(selector);
+      for (const btn of buttons) {
+        const text = btn.textContent?.toLowerCase() || '';
+        if (text.includes('got it') || text.includes('dismiss') || text.includes('close') || text.includes('not now')) {
+          console.log('[MarketClaw] Dismissing modal:', text);
+          btn.click();
+          await delay(500);
+          return true;
+        }
       }
+    } catch (e) {
+      console.warn('[MarketClaw] Invalid selector:', selector);
+    }
+  }
+  
+  // Also check all buttons for dismissal text
+  const allButtons = document.querySelectorAll('button');
+  for (const btn of allButtons) {
+    const text = btn.textContent?.toLowerCase() || '';
+    if (text === 'got it' || text === 'dismiss' || text === 'not now') {
+      console.log('[MarketClaw] Dismissing modal via button text:', text);
+      btn.click();
+      await delay(500);
+      return true;
     }
   }
   

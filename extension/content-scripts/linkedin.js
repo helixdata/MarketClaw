@@ -54,7 +54,7 @@ async function postToLinkedIn(content, mediaUrls = []) {
       '.share-box button',
       '.feed-shared-share-box button',
       // Text-based fallback
-      'button:has-text("Start a post")',
+      
     ];
     
     let startButton = null;
