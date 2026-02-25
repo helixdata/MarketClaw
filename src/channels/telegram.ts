@@ -16,6 +16,38 @@ import { homedir } from 'os';
 
 const logger = pino({ name: 'telegram' });
 
+/**
+ * Per-user message queue to prevent race conditions
+ * When multiple messages arrive simultaneously (e.g., media groups),
+ * we process them sequentially to avoid corrupting conversation history
+ */
+class UserMessageQueue {
+  private queues: Map<string, Promise<void>> = new Map();
+
+  /**
+   * Execute a task for a user, queued behind any pending tasks
+   */
+  async enqueue<T>(userId: string, task: () => Promise<T>): Promise<T> {
+    const currentQueue = this.queues.get(userId) || Promise.resolve();
+    
+    let result: T;
+    const newQueue = currentQueue.then(async () => {
+      result = await task();
+    }).catch((err) => {
+      // Log but don't break the queue for subsequent messages
+      logger.error({ userId, err }, 'Queued task failed');
+      throw err;
+    });
+    
+    this.queues.set(userId, newQueue.catch(() => {})); // Swallow errors for queue continuation
+    
+    await newQueue;
+    return result!;
+  }
+}
+
+const userMessageQueue = new UserMessageQueue();
+
 // Telegram typing indicator expires after ~5 seconds
 // Refresh every 4 seconds to keep it alive
 const TYPING_REFRESH_INTERVAL = 4000;
@@ -385,52 +417,58 @@ export class TelegramChannel implements Channel {
     });
 
     // Handle photo messages
+    // Uses per-user queue to prevent race conditions when multiple images arrive simultaneously
     this.bot.on('photo', async (ctx) => {
       const photos = ctx.message.photo;
       // Get highest resolution photo (last in array)
       const photo = photos[photos.length - 1];
       const caption = ctx.message.caption || '';
+      const userId = String(ctx.from.id);
 
       // Keep typing indicator alive during processing
       const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
 
       try {
-        // Download the image
-        const images = await this.downloadTelegramImages(ctx, [photo.file_id]);
+        // Queue this message to process sequentially per-user
+        // This prevents conversation history corruption when media groups arrive
+        await userMessageQueue.enqueue(userId, async () => {
+          // Download the image
+          const images = await this.downloadTelegramImages(ctx, [photo.file_id]);
 
-        const message: ChannelMessage = {
-          id: String(ctx.message.message_id),
-          userId: String(ctx.from.id),
-          username: ctx.from.username,
-          text: caption || '[Image attached]',
-          timestamp: new Date(ctx.message.date * 1000),
-          images,
-          metadata: {
-            chatId: ctx.chat.id,
-            chatType: ctx.chat.type,
-            hasImage: true,
-          },
-        };
+          const message: ChannelMessage = {
+            id: String(ctx.message.message_id),
+            userId,
+            username: ctx.from.username,
+            text: caption || '[Image attached]',
+            timestamp: new Date(ctx.message.date * 1000),
+            images,
+            metadata: {
+              chatId: ctx.chat.id,
+              chatType: ctx.chat.type,
+              hasImage: true,
+            },
+          };
 
-        logger.info({ userId: message.userId, hasImage: true, caption: caption.slice(0, 50) }, 'Received photo message');
+          logger.info({ userId: message.userId, hasImage: true, caption: caption.slice(0, 50) }, 'Received photo message');
 
-        const handler = channelRegistry.getMessageHandler();
-        if (!handler) {
-          stopTyping();
-          await ctx.reply('⚠️ Agent not configured.');
-          return;
-        }
+          const handler = channelRegistry.getMessageHandler();
+          if (!handler) {
+            stopTyping();
+            await ctx.reply('⚠️ Agent not configured.');
+            return;
+          }
 
-        const response = await handler(this, message);
+          const response = await handler(this, message);
+          
+          if (response) {
+            await this.send(message.userId, {
+              ...response,
+              replyToId: message.id,
+            });
+          }
+        });
         
         stopTyping();
-        
-        if (response) {
-          await this.send(message.userId, {
-            ...response,
-            replyToId: message.id,
-          });
-        }
       } catch (error) {
         stopTyping();
         logger.error({ error, userId: ctx.from.id }, 'Error processing photo message');
@@ -439,90 +477,93 @@ export class TelegramChannel implements Channel {
     });
 
     // Handle document/file messages (images or documents)
+    // Uses per-user queue to prevent race conditions when multiple files arrive simultaneously
     this.bot.on('document', async (ctx) => {
       const doc = ctx.message.document;
       const mimeType = doc.mime_type || '';
       const filename = doc.file_name || 'document';
       const caption = ctx.message.caption || '';
+      const userId = String(ctx.from.id);
 
       // Keep typing indicator alive during processing
       const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
 
       try {
-        let images: ChannelImage[] = [];
-        const documents: ChannelDocument[] = [];
+        // Queue this message to process sequentially per-user
+        await userMessageQueue.enqueue(userId, async () => {
+          let images: ChannelImage[] = [];
+          const documents: ChannelDocument[] = [];
 
-        // Handle image documents
-        if (mimeType.startsWith('image/')) {
-          images = await this.downloadTelegramImages(ctx, [doc.file_id]);
-        }
-        // Handle supported document types (PDF, Word, etc.)
-        else if (documentParser.isSupportedDocumentByFilename(mimeType, filename)) {
-          const parsed = await this.downloadTelegramDocument(ctx, doc.file_id, filename, mimeType);
-          if (parsed) {
-            documents.push(parsed);
+          // Handle image documents
+          if (mimeType.startsWith('image/')) {
+            images = await this.downloadTelegramImages(ctx, [doc.file_id]);
           }
-        }
-        else {
-          // Unsupported file type
-          stopTyping();
-          await ctx.reply(`⚠️ Unsupported file type: ${mimeType || 'unknown'}. I can read PDF, Word (.docx/.doc), and text files.`);
-          return;
-        }
+          // Handle supported document types (PDF, Word, etc.)
+          else if (documentParser.isSupportedDocumentByFilename(mimeType, filename)) {
+            const parsed = await this.downloadTelegramDocument(ctx, doc.file_id, filename, mimeType);
+            if (parsed) {
+              documents.push(parsed);
+            }
+          }
+          else {
+            // Unsupported file type
+            await ctx.reply(`⚠️ Unsupported file type: ${mimeType || 'unknown'}. I can read PDF, Word (.docx/.doc), and text files.`);
+            return;
+          }
 
-        // Build text content including document text
-        let text = caption;
-        if (documents.length > 0) {
-          const docInfo = documents.map(d => 
-            `[Document: ${d.filename}${d.pageCount ? ` (${d.pageCount} pages)` : ''}, ${d.wordCount} words]\n\n${d.text}`
-          ).join('\n\n---\n\n');
-          text = text ? `${text}\n\n${docInfo}` : docInfo;
-        }
-        if (!text && images.length > 0) {
-          text = '[Image attached]';
-        }
+          // Build text content including document text
+          let text = caption;
+          if (documents.length > 0) {
+            const docInfo = documents.map(d => 
+              `[Document: ${d.filename}${d.pageCount ? ` (${d.pageCount} pages)` : ''}, ${d.wordCount} words]\n\n${d.text}`
+            ).join('\n\n---\n\n');
+            text = text ? `${text}\n\n${docInfo}` : docInfo;
+          }
+          if (!text && images.length > 0) {
+            text = '[Image attached]';
+          }
 
-        const message: ChannelMessage = {
-          id: String(ctx.message.message_id),
-          userId: String(ctx.from.id),
-          username: ctx.from.username,
-          text,
-          timestamp: new Date(ctx.message.date * 1000),
-          images: images.length > 0 ? images : undefined,
-          documents: documents.length > 0 ? documents : undefined,
-          metadata: {
-            chatId: ctx.chat.id,
-            chatType: ctx.chat.type,
-            hasImage: images.length > 0,
-            hasDocument: documents.length > 0,
-            filename,
+          const message: ChannelMessage = {
+            id: String(ctx.message.message_id),
+            userId,
+            username: ctx.from.username,
+            text,
+            timestamp: new Date(ctx.message.date * 1000),
+            images: images.length > 0 ? images : undefined,
+            documents: documents.length > 0 ? documents : undefined,
+            metadata: {
+              chatId: ctx.chat.id,
+              chatType: ctx.chat.type,
+              hasImage: images.length > 0,
+              hasDocument: documents.length > 0,
+              filename,
           },
-        };
+          };
 
-        logger.info({ 
-          userId: message.userId, 
-          hasImage: images.length > 0, 
-          hasDocument: documents.length > 0,
-          filename 
-        }, 'Received document');
+          logger.info({ 
+            userId: message.userId, 
+            hasImage: images.length > 0, 
+            hasDocument: documents.length > 0,
+            filename 
+          }, 'Received document');
 
-        const handler = channelRegistry.getMessageHandler();
-        if (!handler) {
-          stopTyping();
-          await ctx.reply('⚠️ Agent not configured.');
-          return;
-        }
+          const handler = channelRegistry.getMessageHandler();
+          if (!handler) {
+            await ctx.reply('⚠️ Agent not configured.');
+            return;
+          }
 
-        const response = await handler(this, message);
+          const response = await handler(this, message);
+          
+          if (response) {
+            await this.send(message.userId, {
+              ...response,
+              replyToId: message.id,
+            });
+          }
+        });
         
         stopTyping();
-        
-        if (response) {
-          await this.send(message.userId, {
-            ...response,
-            replyToId: message.id,
-          });
-        }
       } catch (error) {
         stopTyping();
         logger.error({ error, userId: ctx.from.id }, 'Error processing document');
