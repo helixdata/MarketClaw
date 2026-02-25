@@ -19,8 +19,11 @@ export interface DiscordConfig extends ChannelConfig {
   botToken: string;
   guildIds?: string[];           // Limit to specific servers
   channelIds?: string[];         // Limit to specific channels
+  allowedGuilds?: string[];      // Alias for guildIds
+  allowedChannels?: string[];    // Alias for channelIds
   allowedRoles?: string[];       // Roles that can interact
   commandPrefix?: string;        // e.g., "!" for "!help"
+  requireMention?: boolean;      // If false, respond to all messages in allowed channels
 }
 
 export class DiscordChannel implements Channel {
@@ -227,16 +230,20 @@ export class DiscordChannel implements Channel {
       // Ignore bot messages
       if (msg.author.bot) return;
 
-      // Check guild restrictions
-      if (this.config!.guildIds && this.config!.guildIds.length > 0) {
-        if (!msg.guild || !this.config!.guildIds.includes(msg.guild.id)) {
+      // Check guild restrictions (support both guildIds and allowedGuilds)
+      const guildIds = this.config!.guildIds || this.config!.allowedGuilds;
+      if (guildIds && guildIds.length > 0) {
+        if (!msg.guild || !guildIds.includes(msg.guild.id)) {
+          logger.debug({ msgGuildId: msg.guild?.id, allowedGuilds: guildIds }, 'Message rejected: guild not in allowlist');
           return;
         }
       }
 
-      // Check channel restrictions
-      if (this.config!.channelIds && this.config!.channelIds.length > 0) {
-        if (!this.config!.channelIds.includes(msg.channel.id)) {
+      // Check channel restrictions (support both channelIds and allowedChannels)
+      const channelIds = this.config!.channelIds || this.config!.allowedChannels;
+      if (channelIds && channelIds.length > 0) {
+        if (!channelIds.includes(msg.channel.id)) {
+          logger.debug({ msgChannelId: msg.channel.id, allowedChannels: channelIds }, 'Message rejected: channel not in allowlist');
           return;
         }
       }
@@ -254,6 +261,7 @@ export class DiscordChannel implements Channel {
       // Check for command prefix or bot mention
       const prefix = this.config!.commandPrefix || '';
       const botMention = `<@${this.client!.user?.id}>`;
+      const requireMention = this.config!.requireMention !== false; // Default true
       
       let content = msg.content;
       let shouldRespond = false;
@@ -270,6 +278,10 @@ export class DiscordChannel implements Channel {
       // Respond to prefix
       else if (prefix && content.startsWith(prefix)) {
         content = content.slice(prefix.length).trim();
+        shouldRespond = true;
+      }
+      // Respond to all messages if requireMention is false
+      else if (!requireMention) {
         shouldRespond = true;
       }
 
