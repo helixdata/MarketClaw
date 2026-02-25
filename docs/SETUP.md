@@ -103,10 +103,12 @@ export RESEND_API_KEY="re_..."
 Config is stored at `~/.marketclaw/config.yaml`:
 
 ```yaml
-telegram:
-  botToken: "your-token"
-  allowedUsers: [123456789]  # Optional: restrict access
-  adminUsers: [123456789]    # Optional: who can schedule
+channels:
+  telegram:
+    enabled: true
+    botToken: "your-token"
+    allowedUsers: [123456789]  # Optional: restrict access
+    adminUsers: [123456789]    # Optional: who can schedule
 
 providers:
   default: anthropic

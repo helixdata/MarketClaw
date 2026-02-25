@@ -470,7 +470,7 @@ export async function startAgent(): Promise<void> {
   logger.info('Sub-agents initialized', { count: enabledAgents.length });
 
   // Initialize team management
-  const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+  const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
   await teamManager.init(adminUsers[0]);
   toolRegistry.registerAll(teamTools, { category: 'utility' });
   const teamMembers = teamManager.listMembers();
@@ -582,7 +582,7 @@ export async function startAgent(): Promise<void> {
     // Handle different job types
     if (job.type === 'reminder' && job.payload.content) {
       // Send reminder to configured users
-      const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+      const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
       for (const userId of adminUsers) {
         try {
           await notifyChannel.send(String(userId), { 
@@ -596,7 +596,7 @@ export async function startAgent(): Promise<void> {
         }
       }
     } else if (job.type === 'post') {
-      const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+      const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
       for (const userId of adminUsers) {
         try {
           await notifyChannel.send(String(userId), {
@@ -624,7 +624,7 @@ export async function startAgent(): Promise<void> {
         });
         
         // Notify user of task completion
-        const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+        const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
         const notify = job.payload.metadata?.notify !== false; // Default to notifying
         
         if (notify && result) {
@@ -655,7 +655,7 @@ export async function startAgent(): Promise<void> {
         });
         
         // Notify user of failure
-        const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+        const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
         for (const userId of adminUsers) {
           try {
             await notifyChannel.send(String(userId), {
@@ -685,7 +685,7 @@ export async function startAgent(): Promise<void> {
     
     const { identity } = agent.config;
     const notifyChannel = enabledChannels[0];
-    const adminUsers = config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
+    const adminUsers = config.channels?.telegram?.adminUsers || config.channels?.telegram?.allowedUsers || config.telegram?.adminUsers || config.telegram?.allowedUsers || [];
     
     const resultPreview = task.result 
       ? task.result.slice(0, 2000) + (task.result.length > 2000 ? '...' : '')

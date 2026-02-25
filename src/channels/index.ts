@@ -14,6 +14,6 @@ import './cli.js';
 
 // Re-export for direct access
 export { telegramChannel } from './telegram.js';
-export { discordChannel } from './discord.js';
+export { discordChannel, DiscordChannel } from './discord.js';
 export { slackChannel } from './slack.js';
 export { cliChannel } from './cli.js';

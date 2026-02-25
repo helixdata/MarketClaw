@@ -168,13 +168,15 @@ export { whatsappChannel } from './whatsapp.js';
 4. **Configure MarketClaw:**
    ```yaml
    # ~/.marketclaw/config.yaml
-   discord:
-     botToken: "your-bot-token-here"
-     # Optional restrictions:
-     guildIds: ["123456789"]      # Limit to specific servers
-     channelIds: ["987654321"]    # Limit to specific channels
-     allowedRoles: ["Admin"]      # Limit to users with these roles
-     commandPrefix: "!"           # Optional: respond to "!help"
+   channels:
+     discord:
+       enabled: true
+       botToken: "your-bot-token-here"
+       # Optional restrictions:
+       guildIds: ["123456789"]      # Limit to specific servers
+       channelIds: ["987654321"]    # Limit to specific channels
+       allowedRoles: ["Admin"]      # Limit to users with these roles
+       commandPrefix: "!"           # Optional: respond to "!help"
    ```
 
 5. **Start MarketClaw** — the Discord bot will connect automatically!
@@ -270,10 +272,11 @@ Right-click on servers/channels/roles in Discord with Developer Mode enabled:
 To limit who can use your bot:
 
 ```yaml
-telegram:
-  enabled: true
-  botToken: "..."
-  allowedUsers: [123456789, 987654321]  # Telegram user IDs only
+channels:
+  telegram:
+    enabled: true
+    botToken: "..."
+    allowedUsers: [123456789, 987654321]  # Telegram user IDs only
 ```
 
 Get your user ID by messaging [@userinfobot](https://t.me/userinfobot).
