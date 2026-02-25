@@ -6,10 +6,29 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const postButton = document.getElementById('postButton');
 const postContent = document.getElementById('postContent');
+const postTitle = document.getElementById('postTitle');
 const platformSelect = document.getElementById('platformSelect');
 const profileName = document.getElementById('profileName');
 const profileBadge = document.getElementById('profileBadge');
 const saveProfileBtn = document.getElementById('saveProfile');
+
+// Platforms that need a title field
+const PLATFORMS_WITH_TITLE = ['reddit', 'hackernews'];
+
+// Show/hide title field based on platform
+function updateTitleVisibility() {
+  const platform = platformSelect.value;
+  if (PLATFORMS_WITH_TITLE.includes(platform)) {
+    postTitle.classList.remove('hidden');
+    postContent.placeholder = 'Body text (optional for some posts)';
+  } else {
+    postTitle.classList.add('hidden');
+    postContent.placeholder = "What's happening?";
+  }
+}
+
+platformSelect.addEventListener('change', updateTitleVisibility);
+updateTitleVisibility(); // Initial state
 
 // Load saved profile name
 chrome.storage.local.get(['profileName'], (result) => {
@@ -62,9 +81,19 @@ const PLATFORM_PATTERNS = {
 // Handle post button
 postButton.addEventListener('click', async () => {
   const content = postContent.value.trim();
+  const title = postTitle.value.trim();
   const platform = platformSelect.value;
   
-  if (!content) return;
+  // Require title for Reddit/HN
+  if (PLATFORMS_WITH_TITLE.includes(platform) && !title) {
+    postButton.textContent = 'Title required!';
+    setTimeout(() => {
+      postButton.textContent = 'Post';
+    }, 2000);
+    return;
+  }
+  
+  if (!content && !title) return;
   
   postButton.disabled = true;
   postButton.textContent = 'Posting...';
@@ -91,6 +120,7 @@ postButton.addEventListener('click', async () => {
     chrome.tabs.sendMessage(tab.id, {
       action: 'post',
       content,
+      title,
       platform
     }, (response) => {
       // Check for Chrome runtime error (no content script listening)
@@ -106,6 +136,7 @@ postButton.addEventListener('click', async () => {
       
       if (response?.success) {
         postContent.value = '';
+        postTitle.value = '';
         postButton.textContent = 'Posted! ✓';
         setTimeout(() => {
           postButton.textContent = 'Post';
@@ -128,10 +159,23 @@ postButton.addEventListener('click', async () => {
   }
 });
 
-// Enable post button when content is entered
-postContent.addEventListener('input', () => {
-  postButton.disabled = !postContent.value.trim();
-});
+// Enable post button when content/title is entered
+function updatePostButton() {
+  const platform = platformSelect.value;
+  const hasTitle = postTitle.value.trim().length > 0;
+  const hasContent = postContent.value.trim().length > 0;
+  
+  if (PLATFORMS_WITH_TITLE.includes(platform)) {
+    // Reddit/HN require title
+    postButton.disabled = !hasTitle;
+  } else {
+    postButton.disabled = !hasContent;
+  }
+}
+
+postContent.addEventListener('input', updatePostButton);
+postTitle.addEventListener('input', updatePostButton);
+platformSelect.addEventListener('change', updatePostButton);
 
 // Handle Enter key in profile input
 profileName.addEventListener('keypress', (e) => {
