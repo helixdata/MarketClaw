@@ -162,7 +162,7 @@ async function createPost(content) {
     const postButtonSelectors = [
       'div[aria-label="Post"][role="button"]',
       'button[name="Post"]',
-      'div[role="button"]:has-text("Post")'
+      
     ];
     
     let postButton = null;

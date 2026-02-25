@@ -122,7 +122,7 @@ async function postComment(content) {
     // Find post button
     const postButtonSelectors = [
       'button[type="submit"]',
-      'div[role="button"]:has-text("Post")',
+      
       'button:contains("Post")'
     ];
     

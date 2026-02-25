@@ -116,7 +116,7 @@ async function createPost(content) {
     // Find post button
     const postSelectors = [
       '[data-testid="composerPublishBtn"]',
-      'button:has-text("Post")',
+      
       'button[aria-label*="Publish"]'
     ];
     

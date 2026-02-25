@@ -63,7 +63,7 @@ async function postNewReddit(content, options = {}) {
     // Wait for the post type selector or text area
     // New Reddit has tabs for different post types
     const textTabSelectors = [
-      'button[role="tab"]:has-text("Text")',
+      
       '[data-testid="post-composer-text-tab"]',
       'button:contains("Text")'
     ];
@@ -141,7 +141,7 @@ async function postNewReddit(content, options = {}) {
     
     // Find and click post button
     const postButtonSelectors = [
-      'button[type="submit"]:has-text("Post")',
+      
       '[data-testid="post-submit-button"]',
       'button:contains("Post")',
       'button.submit'
@@ -270,7 +270,7 @@ async function commentOnPost(content) {
     
     // Find comment submit button
     const submitSelectors = [
-      'button[type="submit"]:has-text("Comment")',
+      
       '[data-testid="comment-submit-button"]',
       'button:contains("Comment")'
     ];
