@@ -164,37 +164,60 @@ async function postTweet(content, mediaUrls = []) {
       }
     }
     
-    // Wait for the tweet composer
-    const composerSelectors = [
-      '[data-testid="tweetTextarea_0"]',
-      '[data-testid="tweetTextarea_0_label"]',
-      '[role="textbox"][data-testid="tweetTextarea_0"]',
-      '.public-DraftEditor-content',
-      '[data-contents="true"]'
+    // Wait for the tweet composer - need to find the actual editable element
+    // Twitter's Draft.js structure: tweetTextarea_0 > DraftEditor > contenteditable div
+    let editableDiv = null;
+    
+    // Try direct selectors for the contenteditable first
+    const directSelectors = [
+      '[data-testid="tweetTextarea_0"] [contenteditable="true"]',
+      '[data-testid="tweetTextarea_0"] .public-DraftEditor-content [data-contents="true"]',
+      '[data-testid="tweetTextarea_0"] .DraftEditor-editorContainer [contenteditable="true"]',
+      '.public-DraftEditor-content [contenteditable="true"]',
+      '[role="textbox"][contenteditable="true"]',
     ];
     
-    let composer = null;
-    for (const selector of composerSelectors) {
+    for (const selector of directSelectors) {
       try {
-        composer = await waitForElement(selector, 5000);
-        break;
+        editableDiv = await waitForElement(selector, 3000);
+        if (editableDiv) {
+          console.log('[MarketClaw] Found editable via:', selector);
+          break;
+        }
       } catch {
         continue;
       }
     }
     
-    if (!composer) {
-      return { success: false, error: 'Could not find tweet composer' };
+    // Fallback: find any contenteditable in the composer area
+    if (!editableDiv) {
+      try {
+        const composerArea = await waitForElement('[data-testid="tweetTextarea_0"]', 5000);
+        editableDiv = composerArea.querySelector('[contenteditable="true"]');
+        if (editableDiv) {
+          console.log('[MarketClaw] Found editable via fallback search');
+        }
+      } catch {
+        // ignore
+      }
     }
     
-    // Find the actual editable element
-    const editableDiv = composer.querySelector('[contenteditable="true"]') || 
-                        composer.closest('[contenteditable="true"]') ||
-                        composer;
+    if (!editableDiv) {
+      return { success: false, error: 'Could not find tweet composer editable area' };
+    }
     
-    // Click to focus
+    // Click to focus and activate the editor
+    console.log('[MarketClaw] Editable element:', editableDiv.tagName, editableDiv.className?.slice(0, 50));
     editableDiv.click();
+    editableDiv.focus();
     await delay(300);
+    
+    // Verify we have focus
+    if (document.activeElement !== editableDiv) {
+      console.log('[MarketClaw] Focus not on editable, trying again...');
+      editableDiv.focus();
+      await delay(200);
+    }
     
     // Type the content
     await typeText(editableDiv, content);
