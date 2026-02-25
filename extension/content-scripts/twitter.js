@@ -41,7 +41,7 @@ function delay(ms) {
 
 /**
  * Type text into an element naturally
- * Handles newlines properly for Draft.js editors
+ * Handles Draft.js editors by simulating real keyboard input
  */
 async function typeText(element, text) {
   element.focus();
@@ -58,29 +58,79 @@ async function typeText(element, text) {
   document.execCommand('delete', false, null);
   await delay(50);
   
-  // Split by newlines and insert with proper line breaks
-  // Draft.js doesn't handle \n in insertText well
-  const lines = text.split('\n');
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // For Draft.js, we need to simulate actual keyboard input
+  // Type character by character with proper events
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
     
-    // Insert the line text
-    if (line) {
-      document.execCommand('insertText', false, line);
-    }
-    
-    // Insert line break after each line except the last
-    if (i < lines.length - 1) {
-      // Use insertParagraph for new lines in Draft.js
+    if (char === '\n') {
+      // For newlines, simulate Enter key
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      }));
+      
       document.execCommand('insertParagraph', false, null);
+      
+      element.dispatchEvent(new KeyboardEvent('keyup', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true
+      }));
+    } else {
+      // Simulate keydown
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        keyCode: char.charCodeAt(0),
+        which: char.charCodeAt(0),
+        bubbles: true,
+        cancelable: true
+      }));
+      
+      // Use beforeinput event (Draft.js listens to this)
+      element.dispatchEvent(new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        data: char,
+        bubbles: true,
+        cancelable: true
+      }));
+      
+      // Insert the character
+      document.execCommand('insertText', false, char);
+      
+      // Fire input event
+      element.dispatchEvent(new InputEvent('input', {
+        inputType: 'insertText',
+        data: char,
+        bubbles: true
+      }));
+      
+      // Simulate keyup
+      element.dispatchEvent(new KeyboardEvent('keyup', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        keyCode: char.charCodeAt(0),
+        which: char.charCodeAt(0),
+        bubbles: true
+      }));
     }
     
-    // Small delay between lines to let Draft.js process
-    if (lines.length > 1) {
-      await delay(20);
+    // Small delay every 5 chars to not overwhelm
+    if (i % 5 === 0) {
+      await delay(5);
     }
   }
+  
+  // Final input event to ensure Draft.js syncs
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  await delay(100);
 }
 
 /**
@@ -165,15 +215,15 @@ async function postTweet(content, mediaUrls = []) {
     }
     
     // Wait for the tweet composer - need to find the actual editable element
-    // Twitter's Draft.js structure: tweetTextarea_0 > DraftEditor > contenteditable div
+    // Twitter's tweetTextarea_0 IS the contenteditable div (not a wrapper)
     let editableDiv = null;
     
     // Try direct selectors for the contenteditable first
     const directSelectors = [
-      '[data-testid="tweetTextarea_0"] [contenteditable="true"]',
-      '[data-testid="tweetTextarea_0"] .public-DraftEditor-content [data-contents="true"]',
-      '[data-testid="tweetTextarea_0"] .DraftEditor-editorContainer [contenteditable="true"]',
-      '.public-DraftEditor-content [contenteditable="true"]',
+      '[data-testid="tweetTextarea_0"][contenteditable="true"]',  // tweetTextarea_0 IS the editable
+      '[data-testid="tweetTextarea_0"] [contenteditable="true"]', // editable inside tweetTextarea_0
+      '.public-DraftEditor-content[contenteditable="true"]',
+      '[role="textbox"][contenteditable="true"][data-testid="tweetTextarea_0"]',
       '[role="textbox"][contenteditable="true"]',
     ];
     
