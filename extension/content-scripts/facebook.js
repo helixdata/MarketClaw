@@ -7,6 +7,9 @@
 
 console.log('[MarketClaw] Facebook content script loaded');
 
+// Prevent duplicate execution
+let isPosting = false;
+
 /**
  * Wait for an element to appear
  */
@@ -40,32 +43,39 @@ function delay(ms) {
  * Click the "What's on your mind?" to open composer
  */
 async function openComposer() {
+  console.log('[MarketClaw] Attempting to open Facebook composer...');
+  
+  // Look for the composer trigger - can be a span with the text or the containing div
+  const allSpans = document.querySelectorAll('span');
+  for (const span of allSpans) {
+    if (span.textContent?.includes("What's on your mind")) {
+      // Click the span or its clickable parent
+      const clickable = span.closest('div[role="button"]') || span.closest('div[tabindex]') || span;
+      console.log('[MarketClaw] Found composer trigger via span');
+      clickable.click();
+      await delay(1000);
+      return true;
+    }
+  }
+  
+  // Try aria-label selectors
   const composerSelectors = [
     '[aria-label="Create a post"]',
     '[aria-label*="What\'s on your mind"]',
-    'div[role="button"]:has-text("What\'s on your mind")',
     '[data-pagelet="FeedComposer"] div[role="button"]'
   ];
   
   for (const selector of composerSelectors) {
     const el = document.querySelector(selector);
     if (el) {
+      console.log('[MarketClaw] Found composer trigger via selector:', selector);
       el.click();
       await delay(1000);
       return true;
     }
   }
   
-  // Try finding by text content
-  const buttons = document.querySelectorAll('div[role="button"], span');
-  for (const btn of buttons) {
-    if (btn.textContent?.includes("What's on your mind")) {
-      btn.click();
-      await delay(1000);
-      return true;
-    }
-  }
-  
+  console.log('[MarketClaw] Could not find composer trigger');
   return false;
 }
 
@@ -73,6 +83,12 @@ async function openComposer() {
  * Create a new post
  */
 async function createPost(content) {
+  if (isPosting) {
+    console.log('[MarketClaw] Already posting, ignoring duplicate request');
+    return { success: false, error: 'Already posting' };
+  }
+  isPosting = true;
+  
   try {
     // Try to open composer if not already open
     const composerOpen = document.querySelector('[aria-label="Create post"], div[role="dialog"]');
@@ -85,9 +101,10 @@ async function createPost(content) {
     
     await delay(500);
     
-    // Find the text input area
+    // Find the text input area (Facebook uses Lexical editor)
     const textAreaSelectors = [
-      'div[contenteditable="true"][aria-label*="What\'s on your mind"]',
+      'div[contenteditable="true"][data-lexical-editor="true"]',
+      'div[contenteditable="true"][aria-placeholder*="What\'s on your mind"]',
       'div[contenteditable="true"][role="textbox"]',
       'div[data-contents="true"]',
       'div[contenteditable="true"]'
@@ -95,24 +112,51 @@ async function createPost(content) {
     
     let textArea = null;
     for (const selector of textAreaSelectors) {
-      textArea = document.querySelector(selector);
+      const candidates = document.querySelectorAll(selector);
+      // Pick the one in a dialog if multiple exist
+      for (const el of candidates) {
+        const inDialog = el.closest('div[role="dialog"]');
+        if (inDialog) {
+          textArea = el;
+          break;
+        }
+      }
       if (textArea) break;
+      // Fallback to first match
+      if (candidates.length > 0) {
+        textArea = candidates[0];
+        break;
+      }
     }
     
     if (!textArea) {
       return { success: false, error: 'Could not find post input area' };
     }
     
-    // Focus and type
+    // Focus the text area
     textArea.focus();
-    textArea.click();
     await delay(200);
     
-    // Clear and type content
-    textArea.textContent = '';
+    // Check if there's already content (from previous attempt)
+    const existingText = textArea.textContent?.trim();
+    if (existingText && existingText.length > 0) {
+      console.log('[MarketClaw] Composer already has content, clearing first');
+      // Select all and delete
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(textArea);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand('delete', false, null);
+      await delay(200);
+    }
+    
+    // Type the content character-by-character simulation via insertText
+    textArea.focus();
     document.execCommand('insertText', false, content);
-    textArea.dispatchEvent(new Event('input', { bubbles: true }));
-    await delay(500);
+    await delay(300);
+    
+    console.log('[MarketClaw] Typed content into Facebook composer');
     
     // Find post button
     const postButtonSelectors = [
@@ -140,12 +184,15 @@ async function createPost(content) {
     if (postButton) {
       postButton.click();
       await delay(2000);
+      isPosting = false;
       return { success: true, message: 'Posted to Facebook successfully' };
     } else {
+      isPosting = false;
       return { success: false, error: 'Could not find Post button' };
     }
     
   } catch (err) {
+    isPosting = false;
     return { success: false, error: err.message };
   }
 }
@@ -269,22 +316,40 @@ async function postToFacebook(content, options = {}) {
 }
 
 /**
- * Listen for commands
+ * Listen for commands (WebSocket flow)
  */
-window.addEventListener('marketclaw:post', async (event) => {
-  const { content, action } = event.detail;
-  console.log('[MarketClaw] Facebook action:', action);
+if (!window._marketClawEventListenerRegistered) {
+  window._marketClawEventListenerRegistered = true;
   
-  const result = await postToFacebook(content, { action });
-  
-  window.dispatchEvent(new CustomEvent('marketclaw:postResult', {
-    detail: result
-  }));
-});
+  window.addEventListener('marketclaw:post', async (event) => {
+    const { content, action } = event.detail;
+    console.log('[MarketClaw] Facebook action:', action);
+    
+    const result = await postToFacebook(content, { action });
+    
+    window.dispatchEvent(new CustomEvent('marketclaw:postResult', {
+      detail: result
+    }));
+  });
+}
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'post') {
-    postToFacebook(message.content, message).then(sendResponse);
-    return true;
-  }
-});
+// Track if listener is already registered (prevents duplicate registration)
+if (!window._marketClawListenerRegistered) {
+  window._marketClawListenerRegistered = true;
+  
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[MarketClaw] Facebook received message:', message, 'at', Date.now());
+    if (message.action === 'post') {
+      postToFacebook(message.content, message)
+        .then(result => {
+          console.log('[MarketClaw] Facebook post result:', result);
+          sendResponse(result);
+        })
+        .catch(err => {
+          console.error('[MarketClaw] Facebook post error:', err);
+          sendResponse({ success: false, error: err.message });
+        });
+      return true;
+    }
+  });
+}
