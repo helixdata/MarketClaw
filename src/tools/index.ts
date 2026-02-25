@@ -24,6 +24,7 @@ import { webTools } from './web-tools.js';
 import { campaignTools } from './campaign-tools.js';
 import { calendarTools } from './calendar-tools.js';
 import { productTools } from './product-tools.js';
+import { discordTools } from './discord-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -80,6 +81,9 @@ export async function initializeTools(): Promise<void> {
   // Register product CRUD tools
   toolRegistry.registerAll(productTools, { category: 'utility' });
   
+  // Register Discord tools
+  toolRegistry.registerAll(discordTools, { category: 'social' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -101,3 +105,4 @@ export { webTools } from './web-tools.js';
 export { campaignTools } from './campaign-tools.js';
 export { calendarTools } from './calendar-tools.js';
 export { productTools } from './product-tools.js';
+export { discordTools } from './discord-tools.js';

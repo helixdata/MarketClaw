@@ -54,10 +54,12 @@ The setup wizard will guide you through configuration.
 In `~/.marketclaw/config.yaml`:
 
 ```yaml
-telegram:
-  botToken: your-token
-  allowedUsers: [123456789, 987654321]  # Telegram user IDs
-  adminUsers: [123456789]  # Full admin access
+channels:
+  telegram:
+    enabled: true
+    botToken: your-token
+    allowedUsers: [123456789, 987654321]  # Telegram user IDs
+    adminUsers: [123456789]  # Full admin access
 ```
 
 Find your user ID by messaging [@userinfobot](https://t.me/userinfobot).

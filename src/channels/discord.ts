@@ -3,7 +3,7 @@
  * Interact with MarketClaw via Discord bot
  */
 
-import { Client, GatewayIntentBits, Events, Message as DiscordMessage, TextChannel, Attachment } from 'discord.js';
+import { Client, GatewayIntentBits, Events, Message as DiscordMessage, TextChannel, Attachment, ActivityType } from 'discord.js';
 import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, ChannelImage, ChannelDocument } from './types.js';
 import { channelRegistry } from './registry.js';
 import { documentParser } from '../documents/index.js';
@@ -72,6 +72,13 @@ export class DiscordChannel implements Channel {
       this.client.destroy();
       logger.info('Discord bot stopped');
     }
+  }
+
+  /**
+   * Get the Discord.js client for direct API access
+   */
+  getClient(): Client | null {
+    return this.client;
   }
 
   async send(userId: string, response: ChannelResponse): Promise<void> {
@@ -209,6 +216,11 @@ export class DiscordChannel implements Channel {
 
     this.client.once(Events.ClientReady, (c) => {
       logger.info({ user: c.user.tag }, 'Discord bot ready');
+      // Set bot presence to online with activity
+      c.user.setPresence({
+        status: 'online',
+        activities: [{ name: 'for messages', type: ActivityType.Watching }],
+      });
     });
 
     this.client.on(Events.MessageCreate, async (msg: DiscordMessage) => {

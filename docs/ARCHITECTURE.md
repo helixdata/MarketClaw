@@ -260,9 +260,11 @@ Return Result
 ### Config File (`~/.marketclaw/config.yaml`)
 
 ```yaml
-telegram:
-  botToken: ${TELEGRAM_BOT_TOKEN}
-  allowedUsers: [123456789]
+channels:
+  telegram:
+    enabled: true
+    botToken: ${TELEGRAM_BOT_TOKEN}
+    allowedUsers: [123456789]
 
 providers:
   default: anthropic

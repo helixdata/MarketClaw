@@ -107,7 +107,7 @@ export async function runSetup(): Promise<void> {
   console.log();
 
   // Check if already configured
-  const existingToken = config.telegram?.botToken || process.env.TELEGRAM_BOT_TOKEN;
+  const existingToken = config.channels?.telegram?.botToken || process.env.TELEGRAM_BOT_TOKEN;
   if (existingToken && existingToken.length > 20) {
     console.log(chalk.gray('Existing token found. Press Enter to keep it, or paste a new one.'));
   }
@@ -126,16 +126,19 @@ export async function runSetup(): Promise<void> {
   process.stdout.write(chalk.gray('  Validating... '));
   const telegramValid = await validateTelegramToken(telegramToken);
   
+  // Ensure channels object exists
+  if (!config.channels) config.channels = {};
+  
   if (telegramValid) {
     console.log(chalk.green('valid!'));
-    config.telegram = { ...config.telegram, botToken: telegramToken };
+    config.channels.telegram = { ...config.channels.telegram, enabled: true, botToken: telegramToken };
     steps.telegram = true;
     success('Telegram configured');
   } else {
     console.log(chalk.red('invalid'));
     error('Token validation failed. Check the token and try again.');
     warn('Continuing anyway - you can fix this later.');
-    config.telegram = { ...config.telegram, botToken: telegramToken };
+    config.channels.telegram = { ...config.channels.telegram, enabled: true, botToken: telegramToken };
   }
 
   // Optional: Allowed users
@@ -152,8 +155,8 @@ export async function runSetup(): Promise<void> {
       .filter(n => !isNaN(n));
     
     if (ids.length > 0) {
-      config.telegram = {
-        ...config.telegram,
+      config.channels.telegram = {
+        ...config.channels.telegram,
         allowedUsers: ids,
         adminUsers: ids,
       };

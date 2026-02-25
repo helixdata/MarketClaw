@@ -265,7 +265,7 @@ program
     console.log(`Products: ${prods.length}`);
     console.log(`Campaigns: ${camps.length}`);
     console.log(`Scheduled jobs: ${jobs.length}`);
-    console.log(`Telegram: ${config.telegram?.botToken ? 'configured' : 'not configured'}`);
+    console.log(`Telegram: ${config.channels?.telegram?.botToken ? 'configured' : 'not configured'}`);
   });
 
 // Scheduler commands
