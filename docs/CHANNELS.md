@@ -24,7 +24,7 @@ MarketClaw uses a modular channel system for interacting with users across diffe
 | Channel | Status | Description |
 |---------|--------|-------------|
 | Telegram | ✅ Ready | Full-featured Telegram bot |
-| Discord | 🚧 Stub | Bot framework ready |
+| Discord | ✅ Ready | Full-featured Discord bot with server/channel/role restrictions |
 | Slack | 🚧 Stub | Bolt app ready |
 | CLI | ✅ Ready | Local command-line testing |
 
@@ -145,6 +145,54 @@ export { whatsappChannel } from './whatsapp.js';
    }
    ```
 5. Channel formats and sends the response
+
+## Discord Setup
+
+1. **Create a Discord Application:**
+   - Go to https://discord.com/developers/applications
+   - Click "New Application" and give it a name
+   - Go to "Bot" section → "Add Bot" → "Yes, do it!"
+   - Copy the bot token (click "Reset Token" if needed)
+
+2. **Enable Required Intents:**
+   - In Bot settings, enable:
+     - ✅ **Message Content Intent** (required to read messages)
+     - ✅ Server Members Intent (optional, for role checks)
+
+3. **Invite the Bot to Your Server:**
+   - Go to "OAuth2" → "URL Generator"
+   - Select scopes: `bot`
+   - Select permissions: `Send Messages`, `Read Message History`, `View Channels`
+   - Copy the generated URL and open it to invite the bot
+
+4. **Configure MarketClaw:**
+   ```yaml
+   # ~/.marketclaw/config.yaml
+   discord:
+     botToken: "your-bot-token-here"
+     # Optional restrictions:
+     guildIds: ["123456789"]      # Limit to specific servers
+     channelIds: ["987654321"]    # Limit to specific channels
+     allowedRoles: ["Admin"]      # Limit to users with these roles
+     commandPrefix: "!"           # Optional: respond to "!help"
+   ```
+
+5. **Start MarketClaw** — the Discord bot will connect automatically!
+
+### Discord Features
+
+- Responds to @mentions in servers
+- Responds to all DMs
+- Optional command prefix (e.g., `!ask what should I tweet?`)
+- Supports image attachments
+- Supports document attachments (PDF, DOCX, etc.)
+- Server/channel/role restrictions
+
+### Getting IDs
+
+Right-click on servers/channels/roles in Discord with Developer Mode enabled:
+- Enable Developer Mode: User Settings → Advanced → Developer Mode
+- Right-click → "Copy ID"
 
 ## Telegram Setup
 
