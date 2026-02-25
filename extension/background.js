@@ -244,7 +244,7 @@ async function handleCommand(message) {
  * Handle post command
  */
 async function handlePost(platform, params) {
-  const { content, mediaUrls } = params;
+  const { content, mediaUrls, title, subreddit, action } = params;
   
   if (!PLATFORMS[platform]) {
     return { success: false, error: `Unknown platform: ${platform}` };
@@ -259,12 +259,15 @@ async function handlePost(platform, params) {
   // Wait for page to be ready
   await waitForTab(tab.id);
   
+  // Build options object for platform-specific params
+  const options = { title, subreddit, action };
+  
   // Execute posting script
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: postContent,
-      args: [platform, content, mediaUrls || []]
+      args: [platform, content, mediaUrls || [], options]
     });
     
     return results[0]?.result || { success: false, error: 'No result from content script' };
@@ -572,12 +575,13 @@ function executePrimitiveInPage(command) {
 /**
  * Content posting function (injected into page)
  */
-function postContent(platform, content, mediaUrls) {
+function postContent(platform, content, mediaUrls, options = {}) {
   return new Promise((resolve) => {
     // This will be overridden by platform-specific content scripts
     // For now, dispatch a custom event that content scripts listen to
+    const { title, subreddit, action } = options;
     const event = new CustomEvent('marketclaw:post', {
-      detail: { platform, content, mediaUrls }
+      detail: { platform, content, mediaUrls, title, subreddit, action }
     });
     
     window.dispatchEvent(event);

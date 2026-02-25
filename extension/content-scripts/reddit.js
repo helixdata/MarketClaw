@@ -7,6 +7,154 @@
 
 console.log('[MarketClaw] Reddit content script loaded');
 
+// Prevent duplicate execution
+let isPosting = false;
+
+/**
+ * Generate a UUID v4
+ */
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+/**
+ * Convert plain text to Reddit's Lexical richText format
+ */
+function textToRichText(text) {
+  if (!text) {
+    return JSON.stringify({ document: [{ e: 'par', c: [{ e: 'text', t: '' }] }] });
+  }
+  
+  // Split by newlines and create paragraphs
+  const paragraphs = text.split('\n').map(line => ({
+    e: 'par',
+    c: [{ e: 'text', t: line }]
+  }));
+  
+  return JSON.stringify({ document: paragraphs });
+}
+
+/**
+ * Get reCAPTCHA token from Reddit's page
+ */
+async function getRecaptchaToken() {
+  const REDDIT_RECAPTCHA_KEY = '6LfirrMoAAAAAHZOipvza4kpp_VtTwLNuXVwURNQ';
+  
+  try {
+    // Try to use Reddit's grecaptcha instance if available
+    if (typeof grecaptcha !== 'undefined' && grecaptcha.enterprise) {
+      return await grecaptcha.enterprise.execute(REDDIT_RECAPTCHA_KEY, { action: 'submit' });
+    }
+    if (window.grecaptcha?.enterprise) {
+      return await window.grecaptcha.enterprise.execute(REDDIT_RECAPTCHA_KEY, { action: 'submit' });
+    }
+    // Not required for logged-in users, so empty string is fine
+    return '';
+  } catch (err) {
+    return '';
+  }
+}
+
+/**
+ * Post via Reddit's GraphQL API directly (bypasses UI)
+ */
+async function postViaAPI(title, body, subreddit) {
+  try {
+    // Get CSRF token from cookies
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('csrf_token='))
+      ?.split('=')[1];
+    
+    if (!csrfToken) {
+      return { success: false, error: 'No CSRF token found' };
+    }
+    
+    // Get subreddit from URL if not provided
+    let sr = subreddit;
+    if (!sr) {
+      const urlMatch = window.location.pathname.match(/\/r\/([^\/]+)/);
+      sr = urlMatch ? urlMatch[1] : null;
+    }
+    
+    if (!sr) {
+      return { success: false, error: 'No subreddit specified' };
+    }
+    
+    // Try to get a reCAPTCHA token (not required for logged-in users)
+    const recaptchaToken = await getRecaptchaToken();
+    
+    // Build the GraphQL request
+    const requestBody = {
+      operation: 'CreatePost',
+      variables: {
+        input: {
+          isNsfw: false,
+          isSpoiler: false,
+          content: { richText: textToRichText(body) },
+          title: title,
+          isCommercialCommunication: false,
+          targetLanguage: '',
+          recaptchaToken: recaptchaToken,
+          subredditName: sr,
+          correlationId: generateUUID()
+        }
+      },
+      csrf_token: csrfToken
+    };
+    
+    const response = await fetch('https://www.reddit.com/svc/shreddit/graphql', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Accept': 'text/vnd.reddit.partial+html, application/json',
+        'Content-Type': 'application/json',
+        'Origin': 'https://www.reddit.com',
+        'Referer': `https://www.reddit.com/r/${sr}/submit/`,
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    const responseText = await response.text();
+    
+    // Try to parse as JSON
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      return response.ok 
+        ? { success: true, message: 'Post submitted' }
+        : { success: false, error: 'Invalid response' };
+    }
+    
+    // Check for errors
+    if (result.errors?.length > 0) {
+      return { success: false, error: result.errors.map(e => e.message || JSON.stringify(e)).join(', ') };
+    }
+    
+    // Check for successful post
+    const postData = result.data?.createSubredditPost || result.data?.createPost;
+    if (postData?.ok || postData?.post?.id) {
+      const permalink = postData?.post?.permalink;
+      const url = permalink ? `https://www.reddit.com${permalink}` : null;
+      return { success: true, message: 'Posted to Reddit!', url };
+    }
+    
+    return { success: false, error: 'Unknown response format' };
+    
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 /**
  * Wait for an element to appear
  */
@@ -47,129 +195,23 @@ function isOldReddit() {
  * Post to new Reddit
  */
 async function postNewReddit(content, options = {}) {
-  const { subreddit, title, type = 'text' } = options;
-  
-  try {
-    // If subreddit specified, navigate to submit page
-    if (subreddit) {
-      const submitUrl = `https://www.reddit.com/r/${subreddit}/submit`;
-      if (!window.location.href.includes(submitUrl)) {
-        window.location.href = submitUrl;
-        // Wait for navigation
-        await delay(2000);
-      }
-    }
-    
-    // Wait for the post type selector or text area
-    // New Reddit has tabs for different post types
-    const textTabSelectors = [
-      
-      '[data-testid="post-composer-text-tab"]',
-      'button:contains("Text")'
-    ];
-    
-    // Try to click the Text tab if it exists
-    for (const selector of textTabSelectors) {
-      try {
-        const tab = document.querySelector(selector);
-        if (tab) {
-          tab.click();
-          await delay(500);
-          break;
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    // Find title input
-    const titleSelectors = [
-      'textarea[placeholder*="Title"]',
-      'input[placeholder*="Title"]',
-      '[data-testid="post-title-input"]',
-      'textarea[name="title"]'
-    ];
-    
-    let titleInput = null;
-    for (const selector of titleSelectors) {
-      titleInput = document.querySelector(selector);
-      if (titleInput) break;
-    }
-    
-    if (titleInput && title) {
-      titleInput.focus();
-      titleInput.value = '';
-      document.execCommand('insertText', false, title);
-      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
-      await delay(300);
-    }
-    
-    // Find content/body input
-    const bodySelectors = [
-      'div[contenteditable="true"][data-lexical-editor="true"]',
-      'textarea[placeholder*="Text"]',
-      '[data-testid="post-body-input"]',
-      'div[role="textbox"]',
-      '.public-DraftEditor-content',
-      'textarea[name="text"]'
-    ];
-    
-    let bodyInput = null;
-    for (const selector of bodySelectors) {
-      bodyInput = document.querySelector(selector);
-      if (bodyInput) break;
-    }
-    
-    if (bodyInput) {
-      bodyInput.focus();
-      bodyInput.click();
-      await delay(100);
-      
-      // Clear and type content
-      if (bodyInput.tagName === 'TEXTAREA') {
-        bodyInput.value = '';
-        document.execCommand('insertText', false, content);
-      } else {
-        // Contenteditable div
-        bodyInput.textContent = '';
-        document.execCommand('insertText', false, content);
-      }
-      
-      bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
-      await delay(500);
-    }
-    
-    // Find and click post button
-    const postButtonSelectors = [
-      
-      '[data-testid="post-submit-button"]',
-      'button:contains("Post")',
-      'button.submit'
-    ];
-    
-    let postButton = null;
-    for (const selector of postButtonSelectors) {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent?.toLowerCase().includes('post') && !btn.disabled) {
-          postButton = btn;
-          break;
-        }
-      }
-      if (postButton) break;
-    }
-    
-    if (postButton) {
-      postButton.click();
-      await delay(2000);
-      return { success: true, message: 'Posted to Reddit successfully' };
-    } else {
-      return { success: false, error: 'Could not find post button' };
-    }
-    
-  } catch (err) {
-    return { success: false, error: err.message };
+  if (isPosting) {
+    return { success: false, error: 'Already posting' };
   }
+  isPosting = true;
+  
+  const { subreddit, title } = options;
+  
+  // Title is required for Reddit posts
+  if (!title) {
+    isPosting = false;
+    return { success: false, error: 'Title is required for Reddit posts' };
+  }
+  
+  // Use GraphQL API (UI automation doesn't work for Lexical editor)
+  const apiResult = await postViaAPI(title, content, subreddit);
+  isPosting = false;
+  return apiResult;
 }
 
 /**
@@ -330,9 +372,14 @@ window.addEventListener('marketclaw:post', async (event) => {
 });
 
 // Also listen for direct messages from extension
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'post') {
-    postToReddit(message.content, message).then(sendResponse);
-    return true;
-  }
-});
+if (!window._marketClawRedditListenerRegistered) {
+  window._marketClawRedditListenerRegistered = true;
+  
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[MarketClaw] Reddit received message:', message);
+    if (message.action === 'post') {
+      postToReddit(message.content, message).then(sendResponse);
+      return true;
+    }
+  });
+}
