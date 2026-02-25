@@ -40,8 +40,8 @@ function delay(ms) {
 }
 
 /**
- * Type text into an element naturally
- * Handles Draft.js editors by simulating real keyboard input
+ * Type text into an element using clipboard paste
+ * This is the most reliable method for Draft.js editors
  */
 async function typeText(element, text) {
   element.focus();
@@ -53,83 +53,44 @@ async function typeText(element, text) {
   range.selectNodeContents(element);
   selection.removeAllRanges();
   selection.addRange(range);
-  
-  // Delete any existing content
   document.execCommand('delete', false, null);
   await delay(50);
   
-  // For Draft.js, we need to simulate actual keyboard input
-  // Type character by character with proper events
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  // Method 1: Try using clipboard API to paste
+  try {
+    // Create a paste event with the text
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', text);
     
-    if (char === '\n') {
-      // For newlines, simulate Enter key
-      element.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        cancelable: true
-      }));
-      
-      document.execCommand('insertParagraph', false, null);
-      
-      element.dispatchEvent(new KeyboardEvent('keyup', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true
-      }));
-    } else {
-      // Simulate keydown
-      element.dispatchEvent(new KeyboardEvent('keydown', {
-        key: char,
-        code: `Key${char.toUpperCase()}`,
-        keyCode: char.charCodeAt(0),
-        which: char.charCodeAt(0),
-        bubbles: true,
-        cancelable: true
-      }));
-      
-      // Use beforeinput event (Draft.js listens to this)
-      element.dispatchEvent(new InputEvent('beforeinput', {
-        inputType: 'insertText',
-        data: char,
-        bubbles: true,
-        cancelable: true
-      }));
-      
-      // Insert the character
-      document.execCommand('insertText', false, char);
-      
-      // Fire input event
-      element.dispatchEvent(new InputEvent('input', {
-        inputType: 'insertText',
-        data: char,
-        bubbles: true
-      }));
-      
-      // Simulate keyup
-      element.dispatchEvent(new KeyboardEvent('keyup', {
-        key: char,
-        code: `Key${char.toUpperCase()}`,
-        keyCode: char.charCodeAt(0),
-        which: char.charCodeAt(0),
-        bubbles: true
-      }));
-    }
+    const pasteEvent = new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboardData
+    });
     
-    // Small delay every 5 chars to not overwhelm
-    if (i % 5 === 0) {
-      await delay(5);
+    element.dispatchEvent(pasteEvent);
+    await delay(200);
+    
+    // Check if it worked
+    if (element.textContent?.trim()) {
+      console.log('[MarketClaw] Paste method worked');
+      return;
     }
+  } catch (e) {
+    console.log('[MarketClaw] Paste method failed:', e.message);
   }
   
-  // Final input event to ensure Draft.js syncs
-  element.dispatchEvent(new Event('input', { bubbles: true }));
+  // Method 2: Use execCommand with simpler approach
+  // Just insert the text and let Draft.js handle it
+  try {
+    // Replace newlines with a marker, insert, then fix
+    const singleLineText = text.replace(/\n/g, ' ');
+    document.execCommand('insertText', false, singleLineText);
+    console.log('[MarketClaw] execCommand insert done');
+  } catch (e) {
+    console.log('[MarketClaw] execCommand failed:', e.message);
+  }
+  
   await delay(100);
 }
 
