@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-25
+
+### Added
+- **Discord Tools** - 8 new tools for Discord automation:
+  - `discord_list_channels` - List servers and channels
+  - `discord_post` - Post messages with embed support
+  - `discord_read_channel` - Read recent messages
+  - `discord_react` - Add emoji reactions
+  - `discord_server_info` - Get server information
+  - `discord_create_channel` - Create text/voice/announcement channels
+  - `discord_delete_channel` - Delete channels
+  - `discord_edit_channel` - Edit channel settings (name, topic, slowmode)
+- Discord bot presence (shows as "online" with activity status)
+- Twitter image upload support via clipboard/drop/file-input
+
+### Changed
+- **Channel Configuration** - Standardized all channels under `channels:` key in config
+  - Old top-level `telegram:` config still works (backwards compatible)
+  - Setup wizard now writes to new `channels.telegram` structure
+  - CLI status reads from new config structure
+- Updated all documentation with new config format
+
+### Fixed
+- Twitter Draft.js editor compatibility (proper text insertion, newlines, no duplicates)
+- Twitter paste method uses clipboard instead of keyboard simulation
+
 ## [0.1.1] - 2026-02-24
 
 ### Added
