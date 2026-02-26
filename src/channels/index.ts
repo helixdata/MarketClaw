@@ -11,9 +11,11 @@ import './telegram.js';
 import './discord.js';
 import './slack.js';
 import './cli.js';
+import './a2a.js';
 
 // Re-export for direct access
 export { telegramChannel } from './telegram.js';
 export { discordChannel, DiscordChannel } from './discord.js';
 export { slackChannel } from './slack.js';
 export { cliChannel } from './cli.js';
+export { a2aChannel, A2AChannel } from './a2a.js';
