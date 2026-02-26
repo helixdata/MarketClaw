@@ -718,6 +718,9 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('fs', () => ({
+  default: {
+    existsSync: vi.fn().mockReturnValue(true),
+  },
   existsSync: vi.fn().mockReturnValue(true),
 }));
 
