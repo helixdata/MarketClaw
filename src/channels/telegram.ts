@@ -149,13 +149,22 @@ export class TelegramChannel implements Channel {
     }
 
     try {
-      await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+      const result = await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+      logger.info({ chatId: numericUserId, messageId: result.message_id }, 'Message sent successfully');
     } catch (err: any) {
+      logger.error({ 
+        chatId: numericUserId, 
+        error: err?.message || String(err),
+        description: err?.response?.description,
+        errorCode: err?.response?.error_code,
+      }, 'Failed to send message');
+      
       // Retry without Markdown if parsing fails
       if (err?.response?.description?.includes("parse entities")) {
         logger.warn('Markdown parse failed, retrying without formatting');
         delete extra.parse_mode;
-        await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+        const result = await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+        logger.info({ chatId: numericUserId, messageId: result.message_id }, 'Message sent (without markdown)');
       } else {
         throw err;
       }
