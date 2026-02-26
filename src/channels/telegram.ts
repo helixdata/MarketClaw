@@ -149,13 +149,34 @@ export class TelegramChannel implements Channel {
     }
 
     try {
-      await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+      // Debug: log chat info before sending
+      try {
+        const chatInfo = await this.bot.telegram.getChat(numericUserId);
+        logger.info({ 
+          chatId: numericUserId, 
+          chatType: chatInfo.type,
+          chatTitle: 'title' in chatInfo ? chatInfo.title : undefined,
+        }, 'Sending to chat');
+      } catch (e) {
+        logger.warn({ chatId: numericUserId, error: (e as Error).message }, 'Could not get chat info');
+      }
+      
+      const result = await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+      logger.info({ chatId: numericUserId, messageId: result.message_id }, 'Message sent successfully');
     } catch (err: any) {
+      logger.error({ 
+        chatId: numericUserId, 
+        error: err?.message || String(err),
+        description: err?.response?.description,
+        errorCode: err?.response?.error_code,
+      }, 'Failed to send message');
+      
       // Retry without Markdown if parsing fails
       if (err?.response?.description?.includes("parse entities")) {
         logger.warn('Markdown parse failed, retrying without formatting');
         delete extra.parse_mode;
-        await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+        const result = await this.bot.telegram.sendMessage(numericUserId, response.text, extra);
+        logger.info({ chatId: numericUserId, messageId: result.message_id }, 'Message sent (without markdown)');
       } else {
         throw err;
       }
@@ -364,6 +385,19 @@ export class TelegramChannel implements Channel {
       };
 
       logger.info({ userId: message.userId, chatId, isGroup, text: message.text.slice(0, 50) }, 'Received message');
+
+      // In group chats, only respond to @mentions or /commands
+      if (isGroup) {
+        const botUsername = (await this.bot!.telegram.getMe()).username?.toLowerCase();
+        const textLower = ctx.message.text.toLowerCase();
+        const isMentioned = botUsername && textLower.includes(`@${botUsername}`);
+        const isCommand = ctx.message.text.startsWith('/');
+        
+        if (!isMentioned && !isCommand) {
+          logger.debug({ chatId, isGroup }, 'Skipping group message (not mentioned)');
+          return;
+        }
+      }
 
       // Keep typing indicator alive during processing (bot is always initialized in handlers)
       const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
