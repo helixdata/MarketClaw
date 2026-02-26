@@ -18,6 +18,10 @@ export const scheduleReminderTool: Tool = {
         type: 'string', 
         description: 'When to remind. One-shot: "in 20 minutes", "at 3pm", "tomorrow at 9am". Recurring: "every hour", "every day at 9am".' 
       },
+      syncToCalendar: {
+        type: 'boolean',
+        description: 'Whether to sync this reminder to Google Calendar. Defaults to true if Calendar is connected.'
+      },
     },
     required: ['message', 'when'],
   },
@@ -42,6 +46,7 @@ export const scheduleReminderTool: Tool = {
         deleteAfterRun: true,
         type: 'reminder',
         enabled: true,
+        syncToCalendar: params.syncToCalendar,
         payload: {
           content: params.message,
         },
@@ -71,6 +76,7 @@ export const scheduleReminderTool: Tool = {
       cronExpression,
       type: 'reminder',
       enabled: true,
+      syncToCalendar: params.syncToCalendar,
       payload: {
         content: params.message,
       },
@@ -250,6 +256,10 @@ Examples:
         type: 'boolean', 
         description: 'Whether to send notification when task completes (default: true)' 
       },
+      syncToCalendar: {
+        type: 'boolean',
+        description: 'Whether to sync this task to Google Calendar. Defaults to true if Calendar is connected. Set to false for high-frequency or internal tasks.'
+      },
     },
     required: ['name', 'task', 'when'],
   },
@@ -274,6 +284,7 @@ Examples:
         deleteAfterRun: true,
         type: 'task',
         enabled: true,
+        syncToCalendar: params.syncToCalendar,
         payload: {
           content: params.task,
           productId: params.productId,
@@ -315,6 +326,7 @@ Examples:
       cronExpression,
       type: 'task',
       enabled: true,
+      syncToCalendar: params.syncToCalendar,
       payload: {
         content: params.task,
         productId: params.productId,
