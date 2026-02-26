@@ -78,6 +78,7 @@ const mockMessage = {
 const mockBotUser = {
   id: 'bot-user-id',
   tag: 'MarketClaw#0001',
+  setPresence: vi.fn(),
 };
 
 const mockClient = {
@@ -111,6 +112,14 @@ vi.mock('discord.js', () => {
       ClientReady: 'ready',
       MessageCreate: 'messageCreate',
       Error: 'error',
+    },
+    ActivityType: {
+      Playing: 0,
+      Streaming: 1,
+      Listening: 2,
+      Watching: 3,
+      Custom: 4,
+      Competing: 5,
     },
   };
 });
