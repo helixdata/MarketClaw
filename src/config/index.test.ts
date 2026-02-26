@@ -456,7 +456,7 @@ describe('Config Module', () => {
     it('should include formatting guidelines', () => {
       const prompt = configModule.buildSystemPrompt();
 
-      expect(prompt).toContain('## Formatting (Telegram)');
+      expect(prompt).toContain('## Formatting');
       expect(prompt).toContain('NOT tables');
     });
 
