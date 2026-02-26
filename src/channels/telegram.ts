@@ -49,8 +49,9 @@ class UserMessageQueue {
 const userMessageQueue = new UserMessageQueue();
 
 // Telegram typing indicator expires after ~5 seconds
-// Refresh every 4 seconds to keep it alive
-const TYPING_REFRESH_INTERVAL = 4000;
+// Refresh every 2.5 seconds for more reliable coverage during heavy processing
+// (event loop delays during tool execution can cause 4s intervals to slip)
+const TYPING_REFRESH_INTERVAL = 2500;
 
 /**
  * Keep typing indicator alive during long operations
