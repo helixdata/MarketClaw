@@ -14,6 +14,26 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 import { EventEmitter } from 'events';
+import {
+  createJobCalendarEvent,
+  updateJobCalendarEvent,
+  deleteJobCalendarEvent,
+  syncJobAfterRun,
+  shouldSyncToCalendar,
+  isCalendarConnected,
+  configureCalendarSync,
+} from './calendar-sync.js';
+
+/**
+ * Calendar sync status for a job
+ */
+export interface CalendarSync {
+  enabled: boolean;
+  eventId?: string;           // Google Calendar event ID
+  calendarId?: string;        // Target calendar (overrides default)
+  lastSyncedAt?: number;      // Timestamp of last sync
+  syncError?: string;         // Last sync error (if any)
+}
 
 export interface ScheduledJob {
   id: string;
@@ -38,6 +58,11 @@ export interface ScheduledJob {
   runCount: number;
   createdAt: number;
   updatedAt: number;
+  
+  // Calendar sync fields
+  calendarSync?: CalendarSync;
+  timezone?: string;          // Job-specific timezone override
+  syncToCalendar?: boolean;   // Opt-out flag (defaults to true if calendar connected)
 }
 
 export interface SchedulerConfig {
@@ -166,6 +191,25 @@ export class Scheduler extends EventEmitter {
       }
     }
 
+    // Sync calendar after job runs (delete old event, create new for recurring)
+    if (job.calendarSync?.eventId || (job.syncToCalendar !== false && shouldSyncToCalendar(job))) {
+      const result = await syncJobAfterRun(job);
+      if (result.success && result.eventId) {
+        job.calendarSync = {
+          enabled: true,
+          eventId: result.eventId,
+          lastSyncedAt: Date.now(),
+        };
+      } else if (result.error) {
+        job.calendarSync = {
+          ...job.calendarSync,
+          enabled: true,
+          syncError: result.error,
+        };
+      }
+      this.emit('job:calendar-synced', job);
+    }
+
     await this.save();
   }
 
@@ -195,6 +239,26 @@ export class Scheduler extends EventEmitter {
     
     if (job.enabled) {
       this.startJob(job);
+    }
+
+    // Sync to calendar if enabled and appropriate
+    if (job.syncToCalendar !== false && shouldSyncToCalendar(job)) {
+      const calendarConnected = await isCalendarConnected();
+      if (calendarConnected) {
+        const result = await createJobCalendarEvent(job);
+        if (result.success && result.eventId) {
+          job.calendarSync = {
+            enabled: true,
+            eventId: result.eventId,
+            lastSyncedAt: Date.now(),
+          };
+        } else if (result.error) {
+          job.calendarSync = {
+            enabled: true,
+            syncError: result.error,
+          };
+        }
+      }
     }
 
     await this.save();
@@ -230,6 +294,11 @@ export class Scheduler extends EventEmitter {
   async removeJob(id: string): Promise<boolean> {
     const job = this.jobs.get(id);
     if (!job) return false;
+
+    // Delete calendar event if it exists
+    if (job.calendarSync?.eventId) {
+      await deleteJobCalendarEvent(job);
+    }
 
     this.tasks.get(id)?.stop();
     this.tasks.delete(id);
@@ -478,3 +547,6 @@ export class Scheduler extends EventEmitter {
 
 // Singleton
 export const scheduler = new Scheduler();
+
+// Re-export calendar sync utilities
+export { configureCalendarSync, isCalendarConnected } from './calendar-sync.js';
