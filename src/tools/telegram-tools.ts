@@ -11,13 +11,17 @@ const logger = createStructuredLogger('telegram-tools');
 
 // Known contacts for easy reference
 const KNOWN_CONTACTS: Record<string, { telegramId: string; description: string }> = {
+  'agent-hq': {
+    telegramId: '-5124089402', // Agent HQ group - for inter-agent communication
+    description: 'Agent HQ (group chat with Nova)',
+  },
   'nova': {
-    telegramId: '5900329802', // Brett's Telegram (where Nova responds)
-    description: 'Nova (Clawdbot AI assistant)',
+    telegramId: '-5124089402', // Send to Agent HQ group where Nova can see it
+    description: 'Nova (Clawdbot AI assistant) via Agent HQ group',
   },
   'brett': {
     telegramId: '5900329802',
-    description: 'Brett (admin)',
+    description: 'Brett (admin) - direct message',
   },
 };
 
