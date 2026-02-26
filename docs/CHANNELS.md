@@ -27,6 +27,9 @@ MarketClaw uses a modular channel system for interacting with users across diffe
 | Discord | ✅ Ready | Full-featured Discord bot with server/channel/role restrictions |
 | Slack | ✅ Ready | Full-featured Slack bot via Socket Mode |
 | CLI | ✅ Ready | Local command-line testing |
+| A2A | ✅ Ready | Agent-to-Agent protocol for multi-agent communication |
+
+See [A2A Documentation](./A2A.md) for details on agent-to-agent communication.
 
 All channels share the same agent, memory, and tools — only the interface differs.
 

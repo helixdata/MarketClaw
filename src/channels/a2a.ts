@@ -78,6 +78,16 @@ export class A2AChannel implements Channel {
       throw new Error('Channel not initialized');
     }
 
+    // Get the message handler from registry
+    const { channelRegistry } = await import('./registry.js');
+    const handler = channelRegistry.getMessageHandler();
+    if (handler) {
+      this.setMessageHandler(handler);
+      logger.info('Message handler set from registry');
+    } else {
+      logger.warn('No message handler available from registry');
+    }
+
     // Connect to configured agents
     if (this.config.agents) {
       for (const agentConfig of this.config.agents) {
@@ -90,7 +100,7 @@ export class A2AChannel implements Channel {
       await this.connectToBridge(this.config.bridgeUrl);
     }
 
-    logger.info({ agents: this.agents.size }, 'A2A channel started');
+    logger.info({ agents: this.agents.size, hasHandler: !!this.messageHandler }, 'A2A channel started');
   }
 
   async stop(): Promise<void> {
@@ -143,15 +153,30 @@ export class A2AChannel implements Channel {
       ws.on('open', () => {
         agent.ws = ws;
         agent.connected = true;
+        
+        // Announce ourselves to the bridge/agent
+        const announce = {
+          type: 'announce',
+          agent: {
+            id: 'marketclaw',
+            name: 'MarketClaw',
+            description: 'AI Marketing Agent',
+            skills: ['marketing', 'social', 'content'],
+          },
+        };
+        ws.send(JSON.stringify(announce));
+        
         resolve();
       });
 
       ws.on('message', (data) => {
+        logger.info({ agentId: agent.id, dataLength: data.toString().length }, 'WebSocket message received');
         try {
           const message = JSON.parse(data.toString()) as AgentMessage;
+          logger.info({ agentId: agent.id, type: message.type }, 'Parsed message');
           this.handleAgentMessage(agent.id, message);
         } catch (err) {
-          logger.error({ agentId: agent.id, error: err }, 'Failed to parse message');
+          logger.error({ agentId: agent.id, error: err, raw: data.toString().slice(0, 200) }, 'Failed to parse message');
         }
       });
 
@@ -189,6 +214,8 @@ export class A2AChannel implements Channel {
   }
 
   private handleAgentMessage(agentId: string, message: AgentMessage): void {
+    logger.info({ agentId, type: message.type, taskId: message.taskId, from: message.from }, 'handleAgentMessage called');
+    
     // Handle responses to our requests
     if (message.type === 'response' || message.status === 'completed' || message.status === 'failed') {
       const pending = this.pendingRequests.get(message.taskId);
@@ -229,12 +256,18 @@ export class A2AChannel implements Channel {
       };
 
       // Route to message handler
+      logger.info({ hasHandler: !!this.messageHandler, text: channelMessage.text }, 'Routing to message handler');
       if (this.messageHandler) {
         this.messageHandler(this, channelMessage).then((response) => {
+          logger.info({ hasResponse: !!response, responseText: response?.text?.slice(0, 100) }, 'Handler returned');
           if (response) {
             this.sendResponse(agentId, message.taskId, response.text, message.contextId);
           }
+        }).catch((err) => {
+          logger.error({ error: err }, 'Message handler error');
         });
+      } else {
+        logger.warn('No message handler set - cannot process A2A message');
       }
     }
   }
