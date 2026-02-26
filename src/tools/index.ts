@@ -25,6 +25,7 @@ import { campaignTools } from './campaign-tools.js';
 import { calendarTools } from './calendar-tools.js';
 import { productTools } from './product-tools.js';
 import { discordTools } from './discord-tools.js';
+import { telegramTools } from './telegram-tools.js';
 
 /**
  * Initialize all built-in tools
@@ -84,6 +85,9 @@ export async function initializeTools(): Promise<void> {
   // Register Discord tools
   toolRegistry.registerAll(discordTools, { category: 'social' });
   
+  // Register Telegram tools (for messaging other users/bots)
+  toolRegistry.registerAll(telegramTools, { category: 'social' });
+  
   // Future: auto-discover tools from plugins folder
 }
 
@@ -106,3 +110,4 @@ export { campaignTools } from './campaign-tools.js';
 export { calendarTools } from './calendar-tools.js';
 export { productTools } from './product-tools.js';
 export { discordTools } from './discord-tools.js';
+export { telegramTools } from './telegram-tools.js';
