@@ -42,7 +42,10 @@ let systemPrompt = DEFAULT_SYSTEM_PROMPT;
  * Message handler - processes incoming messages from any channel
  */
 async function handleMessage(channel: Channel, message: ChannelMessage): Promise<ChannelResponse | null> {
-  const userId = `${channel.name}:${message.userId}`;
+  // Use chatId for groups (separate conversation per group), userId for DMs
+  const contextId = message.isGroup && message.chatId 
+    ? `${channel.name}:group:${message.chatId}`
+    : `${channel.name}:${message.userId}`;
   const correlationId = generateCorrelationId();
   const msgLogger = createStructuredLogger('message', correlationId);
   
@@ -52,13 +55,13 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
     const level = parts[1] as LogLevel | undefined;
     
     if (level && ['debug', 'info', 'warn', 'error'].includes(level)) {
-      setSessionLogLevel(userId, level);
+      setSessionLogLevel(contextId, level);
       return { text: `🔧 Log level set to ${level.toUpperCase()} for this session.` };
     } else if (parts[1] === 'off' || parts[1] === 'reset') {
-      resetSessionLogLevel(userId);
+      resetSessionLogLevel(contextId);
       return { text: `🔧 Log level reset to default.` };
     } else {
-      setSessionLogLevel(userId, 'debug');
+      setSessionLogLevel(contextId, 'debug');
       return { text: `🔧 Debug mode enabled for this session. Use "/debug off" to disable.` };
     }
   }
@@ -71,7 +74,7 @@ async function handleMessage(channel: Channel, message: ChannelMessage): Promise
   });
 
   // Get or create conversation history
-  const history = conversationHistory.get(userId) || [];
+  const history = conversationHistory.get(contextId) || [];
   
   // Repair any corrupted history (e.g., from timeouts leaving orphaned tool_use blocks)
   const repair = repairConversationHistory(history);
@@ -309,11 +312,11 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   
   toolLoopLogger.loopComplete(iterations, Date.now() - loopStartTime);
 
-  conversationHistory.set(userId, history);
+  conversationHistory.set(contextId, history);
 
   // Log to session
-  await memory.appendToSession(userId, { role: 'user', content: message.text });
-  await memory.appendToSession(userId, { role: 'assistant', content: finalResponse });
+  await memory.appendToSession(contextId, { role: 'user', content: message.text });
+  await memory.appendToSession(contextId, { role: 'assistant', content: finalResponse });
 
   msgLogger.info('Response ready', { 
     channel: channel.name, 

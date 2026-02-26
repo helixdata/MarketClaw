@@ -346,19 +346,24 @@ export class TelegramChannel implements Channel {
 
     // Handle text messages
     this.bot.on('text', async (ctx) => {
+      const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      const chatId = String(ctx.chat.id);
+      
       const message: ChannelMessage = {
         id: String(ctx.message.message_id),
         userId: String(ctx.from.id),
         username: ctx.from.username,
         text: ctx.message.text,
         timestamp: new Date(ctx.message.date * 1000),
+        chatId,
+        isGroup,
         metadata: {
           chatId: ctx.chat.id,
           chatType: ctx.chat.type,
         },
       };
 
-      logger.info({ userId: message.userId, text: message.text.slice(0, 50) }, 'Received message');
+      logger.info({ userId: message.userId, chatId, isGroup, text: message.text.slice(0, 50) }, 'Received message');
 
       // Keep typing indicator alive during processing (bot is always initialized in handlers)
       const stopTyping = startTypingIndicator(this.bot!, ctx.chat.id);
@@ -377,7 +382,8 @@ export class TelegramChannel implements Channel {
         stopTyping();
         
         if (response) {
-          await this.send(message.userId, {
+          // Reply to the chat (group or DM) where the message came from
+          await this.send(chatId, {
             ...response,
             replyToId: message.id,
           });

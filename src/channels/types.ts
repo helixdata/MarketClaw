@@ -83,6 +83,12 @@ export interface ChannelMessage {
   replyToId?: string;
   metadata?: Record<string, unknown>;
   
+  /** Chat/channel ID - for groups, this differs from userId */
+  chatId?: string;
+  
+  /** Whether this message is from a group/channel (vs DM) */
+  isGroup?: boolean;
+  
   /** Images attached to the message */
   images?: ChannelImage[];
   
