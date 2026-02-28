@@ -21,6 +21,16 @@ export interface A2AChannelConfig extends ChannelConfig {
   auth?: {
     token?: string;
   };
+  gopherhole?: {       // GopherHole hub integration
+    enabled?: boolean;
+    apiKey?: string;
+    hubUrl?: string;   // Default: wss://gopherhole.helixdata.workers.dev/ws
+    agentId?: string;  // Override agent ID for GopherHole
+    agentName?: string;
+    description?: string;
+    skills?: string[];
+  };
+  reconnectIntervalMs?: number;  // Base reconnect interval (default: 5000)
 }
 
 interface PendingRequest {
@@ -100,7 +110,12 @@ export class A2AChannel implements Channel {
       await this.connectToBridge(this.config.bridgeUrl);
     }
 
-    logger.info({ agents: this.agents.size, hasHandler: !!this.messageHandler }, 'A2A channel started');
+    // Connect to GopherHole if configured
+    if (this.config.gopherhole?.enabled && this.config.gopherhole?.apiKey) {
+      await this.connectToGopherHole();
+    }
+
+    logger.info({ agents: this.agents.size, hasHandler: !!this.messageHandler, gopherhole: this.isGopherHoleConnected() }, 'A2A channel started');
   }
 
   async stop(): Promise<void> {
@@ -144,6 +159,106 @@ export class A2AChannel implements Channel {
   private async connectToBridge(url: string): Promise<void> {
     // Bridge connection - treats bridge as a special agent that routes to others
     await this.connectToAgent('bridge', url, 'A2A Bridge');
+  }
+
+  private async connectToGopherHole(): Promise<void> {
+    const gphConfig = this.config!.gopherhole!;
+    const hubUrl = gphConfig.hubUrl || 'wss://gopherhole.helixdata.workers.dev/ws';
+    
+    const agent: AgentConnection = {
+      id: 'gopherhole',
+      name: 'GopherHole Hub',
+      url: hubUrl,
+      ws: null,
+      connected: false,
+    };
+
+    try {
+      await this.establishGopherHoleConnection(agent, gphConfig.apiKey!);
+      this.agents.set('gopherhole', agent);
+      logger.info('Connected to GopherHole Hub');
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, 'Failed to connect to GopherHole');
+      this.agents.set('gopherhole', agent);
+      this.scheduleReconnect('gopherhole');
+    }
+  }
+
+  private async establishGopherHoleConnection(agent: AgentConnection, apiKey: string): Promise<void> {
+    const gphConfig = this.config?.gopherhole;
+    
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(agent.url);
+
+      const timeout = setTimeout(() => {
+        ws.terminate();
+        reject(new Error('GopherHole connection timeout'));
+      }, 10000);
+
+      ws.on('open', () => {
+        logger.info('GopherHole connected, authenticating...');
+        // Send auth with agent card
+        ws.send(JSON.stringify({
+          type: 'auth',
+          token: apiKey,
+          agent: {
+            id: gphConfig?.agentId ?? 'marketclaw',
+            name: gphConfig?.agentName ?? 'MarketClaw',
+            description: gphConfig?.description ?? 'AI Marketing Agent',
+            skills: gphConfig?.skills ?? ['marketing', 'social', 'content', 'tweets', 'posts'],
+          },
+        }));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          
+          if (msg.type === 'welcome') {
+            clearTimeout(timeout);
+            agent.ws = ws;
+            agent.connected = true;
+            logger.info({ agentId: msg.agentId }, 'GopherHole authenticated');
+            resolve();
+          } else if (msg.type === 'auth_error') {
+            clearTimeout(timeout);
+            reject(new Error(msg.error || 'GopherHole auth failed'));
+          } else if (msg.type === 'message') {
+            // Incoming message from another agent via GopherHole
+            const a2aMsg: AgentMessage = {
+              type: 'message',
+              taskId: msg.taskId || msg.id || `gph-${Date.now()}`,
+              from: msg.from,
+              content: msg.payload,
+              contextId: msg.payload?.contextId,
+            };
+            this.handleAgentMessage('gopherhole', a2aMsg);
+          } else if (msg.type === 'ack') {
+            // Message acknowledged
+            logger.debug({ taskId: msg.id }, 'GopherHole message acknowledged');
+          } else if (msg.type === 'error') {
+            logger.error({ error: msg.error }, 'GopherHole error');
+          }
+        } catch (err) {
+          logger.error({ error: err, raw: data.toString().slice(0, 200) }, 'Failed to parse GopherHole message');
+        }
+      });
+
+      ws.on('close', (code, reason) => {
+        agent.connected = false;
+        agent.ws = null;
+        logger.info({ code, reason: reason?.toString() }, 'Disconnected from GopherHole');
+        this.scheduleReconnect('gopherhole');
+      });
+
+      ws.on('error', (err) => {
+        clearTimeout(timeout);
+        logger.error({ error: err.message }, 'GopherHole WebSocket error');
+        if (!agent.connected) {
+          reject(err);
+        }
+      });
+    });
   }
 
   private async establishConnection(agent: AgentConnection): Promise<void> {
@@ -348,6 +463,49 @@ export class A2AChannel implements Channel {
     return [];
   }
 
+  /**
+   * Check if GopherHole is connected
+   */
+  isGopherHoleConnected(): boolean {
+    return this.agents.get('gopherhole')?.connected ?? false;
+  }
+
+  /**
+   * Send a message to a remote agent via GopherHole
+   */
+  async sendViaGopherHole(targetAgentId: string, text: string, contextId?: string): Promise<AgentResponse> {
+    const gphConn = this.agents.get('gopherhole');
+    if (!gphConn?.connected || !gphConn.ws) {
+      throw new Error('GopherHole not connected');
+    }
+
+    const taskId = uuidv4();
+    const timeoutMs = this.config?.reconnectIntervalMs ? this.config.reconnectIntervalMs * 60 : 300000;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(taskId);
+        reject(new Error('GopherHole request timeout'));
+      }, timeoutMs);
+
+      this.pendingRequests.set(taskId, { resolve, reject, timeout });
+
+      // GopherHole message format
+      const msg = {
+        type: 'message',
+        id: taskId,
+        to: targetAgentId,
+        payload: {
+          parts: [{ kind: 'text', text }],
+          contextId,
+        },
+      };
+
+      gphConn.ws!.send(JSON.stringify(msg));
+      logger.debug({ targetAgentId, taskId }, 'Sent message via GopherHole');
+    });
+  }
+
   // Channel interface methods
   async send(userId: string, response: ChannelResponse): Promise<void> {
     // userId is the agentId in A2A context
@@ -372,13 +530,20 @@ export class A2AChannel implements Channel {
   }
 
   isConfigured(): boolean {
-    return !!(this.config?.bridgeUrl || (this.config?.agents && this.config.agents.length > 0));
+    return !!(
+      this.config?.bridgeUrl || 
+      (this.config?.agents && this.config.agents.length > 0) ||
+      (this.config?.gopherhole?.enabled && this.config.gopherhole?.apiKey)
+    );
   }
 
   async validateConfig(config: ChannelConfig): Promise<{ valid: boolean; error?: string }> {
     const c = config as A2AChannelConfig;
-    if (!c.bridgeUrl && (!c.agents || c.agents.length === 0)) {
-      return { valid: false, error: 'Either bridgeUrl or agents must be configured' };
+    if (!c.bridgeUrl && (!c.agents || c.agents.length === 0) && !c.gopherhole?.enabled) {
+      return { valid: false, error: 'Either bridgeUrl, agents, or gopherhole must be configured' };
+    }
+    if (c.gopherhole?.enabled && !c.gopherhole.apiKey) {
+      return { valid: false, error: 'GopherHole requires an API key' };
     }
     return { valid: true };
   }
