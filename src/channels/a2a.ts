@@ -458,9 +458,42 @@ export class A2AChannel implements Channel {
   /**
    * Discover agents (from bridge)
    */
-  async discoverAgents(): Promise<Array<{ id: string; name: string; skills: string[] }>> {
-    // TODO: Implement discovery via bridge or direct A2A protocol
-    return [];
+  async discoverAgents(): Promise<Array<{ id: string; name: string; description?: string; skills: string[] }>> {
+    // Discover agents via GopherHole API
+    const gphConfig = this.config?.gopherhole;
+    if (!gphConfig?.enabled) {
+      return [];
+    }
+
+    try {
+      const hubUrl = gphConfig.hubUrl || 'wss://gopherhole.ai/ws';
+      // Convert ws:// to https:// for API calls
+      const apiBase = hubUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace('/ws', '');
+      
+      const response = await fetch(`${apiBase}/api/discover/agents`);
+      if (!response.ok) {
+        logger.warn({ status: response.status }, 'Failed to discover agents from GopherHole');
+        return [];
+      }
+
+      const data = await response.json() as { agents: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        category?: string;
+        tags?: string[];
+      }> };
+
+      return data.agents.map(agent => ({
+        id: agent.id,
+        name: agent.name,
+        description: agent.description,
+        skills: agent.tags || [],
+      }));
+    } catch (error) {
+      logger.error({ error: (error as Error).message }, 'Error discovering agents');
+      return [];
+    }
   }
 
   /**
