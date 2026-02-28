@@ -11,6 +11,26 @@ import { channelRegistry } from './registry.js';
 
 const logger = pino({ name: 'a2a-channel' });
 
+/** A2A Skill schema */
+export interface A2ASkill {
+  id: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  examples?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+}
+
+/** A2A Agent Card */
+export interface A2AAgentCard {
+  name: string;
+  description?: string;
+  url?: string;
+  version?: string;
+  skills?: A2ASkill[];
+}
+
 export interface A2AChannelConfig extends ChannelConfig {
   bridgeUrl?: string;  // URL of A2A bridge (ws://...)
   agents?: Array<{     // Direct agent connections (no bridge)
@@ -24,8 +44,10 @@ export interface A2AChannelConfig extends ChannelConfig {
   gopherhole?: {       // GopherHole hub integration
     enabled?: boolean;
     apiKey?: string;
-    hubUrl?: string;   // Default: wss://gopherhole.helixdata.workers.dev/ws
-    agentId?: string;  // Override agent ID for GopherHole
+    hubUrl?: string;   // Default: wss://hub.gopherhole.ai/ws
+    agentCard?: A2AAgentCard;  // Full agent card with skills
+    // Legacy fields (deprecated, use agentCard instead)
+    agentId?: string;
     agentName?: string;
     description?: string;
     skills?: string[];
@@ -197,16 +219,57 @@ export class A2AChannel implements Channel {
 
       ws.on('open', () => {
         logger.info('GopherHole connected, authenticating...');
-        // Send auth with agent card
+        
+        // Build agent card from config or use defaults
+        const agentCard: A2AAgentCard = gphConfig?.agentCard ?? {
+          name: gphConfig?.agentName ?? 'MarketClaw',
+          description: gphConfig?.description ?? 'AI Marketing Agent for social media, content creation, and campaign management',
+          version: '1.0.0',
+          skills: [
+            {
+              id: 'marketing',
+              name: 'Marketing Strategy',
+              description: 'Create marketing strategies and campaign plans',
+              tags: ['marketing', 'strategy', 'campaigns'],
+              examples: ['Create a marketing plan for my product launch'],
+              inputModes: ['text/plain'],
+              outputModes: ['text/plain', 'text/markdown'],
+            },
+            {
+              id: 'social',
+              name: 'Social Media',
+              description: 'Create and schedule social media content',
+              tags: ['social', 'twitter', 'linkedin', 'content'],
+              examples: ['Write a tweet about our new feature', 'Create a LinkedIn post'],
+              inputModes: ['text/plain'],
+              outputModes: ['text/plain'],
+            },
+            {
+              id: 'content',
+              name: 'Content Creation',
+              description: 'Generate blog posts, articles, and marketing copy',
+              tags: ['content', 'writing', 'copywriting', 'blog'],
+              examples: ['Write a blog post about AI trends'],
+              inputModes: ['text/plain'],
+              outputModes: ['text/plain', 'text/markdown'],
+            },
+            {
+              id: 'analytics',
+              name: 'Analytics',
+              description: 'Analyze marketing performance and provide insights',
+              tags: ['analytics', 'metrics', 'reporting'],
+              examples: ['Analyze my campaign performance'],
+              inputModes: ['text/plain'],
+              outputModes: ['text/plain', 'text/markdown'],
+            },
+          ],
+        };
+        
+        // Send auth with full agent card
         ws.send(JSON.stringify({
           type: 'auth',
           token: apiKey,
-          agent: {
-            id: gphConfig?.agentId ?? 'marketclaw',
-            name: gphConfig?.agentName ?? 'MarketClaw',
-            description: gphConfig?.description ?? 'AI Marketing Agent',
-            skills: gphConfig?.skills ?? ['marketing', 'social', 'content', 'tweets', 'posts'],
-          },
+          agentCard,
         }));
       });
 
