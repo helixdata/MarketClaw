@@ -233,6 +233,16 @@ export class A2AChannel implements Channel {
               contextId: msg.payload?.contextId,
             };
             this.handleAgentMessage('gopherhole', a2aMsg);
+          } else if (msg.type === 'response') {
+            // Response to our request from another agent
+            const a2aMsg: AgentMessage = {
+              type: 'response',
+              taskId: msg.taskId || msg.id,
+              from: msg.from,
+              content: msg.content,
+              status: msg.status || 'completed',
+            };
+            this.handleAgentMessage('gopherhole', a2aMsg);
           } else if (msg.type === 'ack') {
             // Message acknowledged
             logger.debug({ taskId: msg.id }, 'GopherHole message acknowledged');
