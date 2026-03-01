@@ -7,7 +7,7 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import pino from 'pino';
-import { GopherHole, AgentCardConfig, MessagePayload, Task } from '@gopherhole/sdk';
+import { GopherHole, AgentCardConfig, MessagePayload, Task, getTaskResponseText } from '@gopherhole/sdk';
 import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, MessageHandler } from './types.js';
 import { channelRegistry } from './registry.js';
 
@@ -277,6 +277,12 @@ export class A2AChannel implements Channel {
         .map((p) => p.text)
         .join('\n') ?? '';
 
+      // Skip system messages or empty messages
+      if (message.from === 'system' || !text.trim()) {
+        logger.debug({ from: message.from, taskId: message.taskId }, 'Skipping system/empty message');
+        return;
+      }
+
       const channelMessage: ChannelMessage = {
         id: message.taskId || `gph-${Date.now()}`,
         userId: message.from,
@@ -294,13 +300,11 @@ export class A2AChannel implements Channel {
       // Route to message handler
       if (this.messageHandler) {
         this.messageHandler(this, channelMessage).then((response) => {
-          if (response && message.from) {
-            // Send response back to the sender agent
-            this.gopherholeClient?.sendText(message.from, response.text).then((task) => {
-              logger.info({ taskId: task.id, to: message.from }, 'Sent reply via GopherHole');
-            }).catch((err) => {
-              logger.error({ error: err.message, to: message.from }, 'Failed to reply via GopherHole');
-            });
+          if (response && message.taskId) {
+            // Send task_response via WebSocket with the ORIGINAL taskId
+            // This completes the task instead of creating a new one
+            this.sendGopherHoleTaskResponse(message.taskId, response.text);
+            logger.info({ taskId: message.taskId, to: message.from }, 'Sent task_response via GopherHole');
           }
         }).catch((err) => {
           logger.error({ error: err }, 'Message handler error');
@@ -310,7 +314,7 @@ export class A2AChannel implements Channel {
 
     this.gopherholeClient.on('taskUpdate', (task) => {
       // Handle task status updates (for our outgoing requests)
-      logger.debug({ taskId: task.id, status: task.status.state }, 'Task update received');
+      logger.debug({ taskId: task.id, status: task.status?.state }, 'Task update received');
       
       const pending = this.pendingRequests.get(task.id);
       if (pending && (task.status.state === 'completed' || task.status.state === 'failed')) {
@@ -320,11 +324,8 @@ export class A2AChannel implements Channel {
         if (task.status.state === 'failed') {
           pending.reject(new Error(task.status.message ?? 'Task failed'));
         } else {
-          const text = task.history
-            ?.slice(-1)[0]?.parts
-            ?.filter((p) => p.kind === 'text')
-            .map((p) => p.text)
-            .join('\n') ?? '';
+          // Use SDK helper to extract response text
+          const text = getTaskResponseText(task);
           pending.resolve({ text, status: task.status.state });
         }
       }
@@ -490,6 +491,36 @@ export class A2AChannel implements Channel {
   }
 
   /**
+   * Send a task_response via GopherHole WebSocket (completes the original task)
+   */
+  private sendGopherHoleTaskResponse(taskId: string, text: string): void {
+    // Access the underlying WebSocket from the SDK
+    // The SDK doesn't expose this directly, so we need to access it via the internal ws property
+    const client = this.gopherholeClient as any;
+    const ws = client?.ws;
+    
+    if (!ws || ws.readyState !== 1) {
+      logger.warn({ taskId }, 'Cannot send task_response - GopherHole WebSocket not connected');
+      return;
+    }
+
+    const response = {
+      type: 'task_response',
+      taskId,
+      status: { state: 'completed' },
+      artifact: {
+        artifactId: `response-${Date.now()}`,
+        mimeType: 'text/plain',
+        parts: [{ kind: 'text', text }],
+      },
+      lastChunk: true,
+    };
+
+    ws.send(JSON.stringify(response));
+    logger.debug({ taskId }, 'Sent task_response to GopherHole');
+  }
+
+  /**
    * Send a message to another agent (direct connection)
    */
   async sendToAgent(agentId: string, message: string, contextId?: string): Promise<AgentResponse> {
@@ -586,6 +617,7 @@ export class A2AChannel implements Channel {
     }
 
     const task = await this.gopherholeClient.sendText(targetAgentId, text, { contextId });
+    logger.debug({ taskId: task.id, targetAgentId, status: task.status.state }, 'Sent message via GopherHole');
     
     // If task already completed (synchronous response)
     if (task.status.state === 'completed' || task.status.state === 'failed') {
