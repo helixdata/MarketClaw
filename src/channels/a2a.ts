@@ -294,10 +294,12 @@ export class A2AChannel implements Channel {
       // Route to message handler
       if (this.messageHandler) {
         this.messageHandler(this, channelMessage).then((response) => {
-          if (response && message.taskId) {
-            // Reply via SDK
-            this.gopherholeClient?.replyText(message.taskId, response.text).catch((err) => {
-              logger.error({ error: err.message }, 'Failed to reply via GopherHole');
+          if (response && message.from) {
+            // Send response back to the sender agent
+            this.gopherholeClient?.sendText(message.from, response.text).then((task) => {
+              logger.info({ taskId: task.id, to: message.from }, 'Sent reply via GopherHole');
+            }).catch((err) => {
+              logger.error({ error: err.message, to: message.from }, 'Failed to reply via GopherHole');
             });
           }
         }).catch((err) => {
