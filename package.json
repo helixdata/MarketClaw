@@ -64,7 +64,7 @@
     "openai": "^6.25.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
-    "pino": "^9.5.0",
+    "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "pptxgenjs": "^4.0.1",
     "telegraf": "^4.16.3",
