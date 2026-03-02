@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import pino from 'pino';
 import { GopherHole, AgentCardConfig, MessagePayload, Task, getTaskResponseText } from '@gopherhole/sdk';
-import { Channel, ChannelConfig, ChannelMessage, ChannelResponse, MessageHandler } from './types.js';
+import { Channel, ChannelConfig, ChannelMessage, ChannelImage, ChannelResponse, MessageHandler } from './types.js';
 import { channelRegistry } from './registry.js';
 
 const logger = pino({ name: 'a2a-channel' });
@@ -270,15 +270,48 @@ export class A2AChannel implements Channel {
 
     this.gopherholeClient.on('message', (message) => {
       // Handle incoming message from another agent
-      logger.info({ from: message.from, taskId: message.taskId }, 'Received message via GopherHole');
+      logger.info({ 
+        from: message.from, 
+        taskId: message.taskId,
+        partsCount: message.payload?.parts?.length,
+        partKinds: message.payload?.parts?.map(p => p.kind),
+      }, 'Received message via GopherHole');
       
       const text = message.payload.parts
         ?.filter((p) => p.kind === 'text')
         .map((p) => p.text)
         .join('\n') ?? '';
 
-      // Skip system messages or empty messages
-      if (message.from === 'system' || !text.trim()) {
+      // Extract images from data/file parts
+      const images: ChannelImage[] = [];
+      for (const part of message.payload.parts || []) {
+        if ((part.kind === 'data' || part.kind === 'file') && part.mimeType?.startsWith('image/')) {
+          const imageId = `a2a-img-${Date.now()}-${images.length}`;
+          if (part.data) {
+            // Base64 data - pass directly as base64 (not as data URL)
+            images.push({
+              id: imageId,
+              url: '', // Empty URL since we have base64
+              base64: part.data,
+              mimeType: part.mimeType,
+            });
+          } else if (part.uri) {
+            // URI reference
+            images.push({
+              id: imageId,
+              url: part.uri,
+              mimeType: part.mimeType,
+            });
+          }
+        }
+      }
+
+      if (images.length > 0) {
+        logger.info({ from: message.from, imageCount: images.length }, 'Received images via A2A');
+      }
+
+      // Skip system messages or empty messages (but allow if images present)
+      if (message.from === 'system' || (!text.trim() && images.length === 0)) {
         logger.debug({ from: message.from, taskId: message.taskId }, 'Skipping system/empty message');
         return;
       }
@@ -291,6 +324,7 @@ export class A2AChannel implements Channel {
         timestamp: new Date(message.timestamp),
         chatId: 'gopherhole',
         isGroup: false,
+        images: images.length > 0 ? images : undefined,
         metadata: {
           a2a: true,
           gopherhole: true,
