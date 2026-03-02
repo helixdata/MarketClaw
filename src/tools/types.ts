@@ -94,7 +94,8 @@ export type ToolCategory =
   | 'memory'
   | 'social'
   | 'research'
-  | 'utility';
+  | 'utility'
+  | 'a2a';
 
 /**
  * Extended tool with metadata
