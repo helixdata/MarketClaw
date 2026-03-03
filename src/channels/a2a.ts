@@ -8,7 +8,25 @@ import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import pino from 'pino';
 import { GopherHole, AgentCardConfig, MessagePayload, Task, getTaskResponseText } from '@gopherhole/sdk';
-import { Channel, ChannelConfig, ChannelMessage, ChannelImage, ChannelResponse, MessageHandler } from './types.js';
+import { Channel, ChannelConfig, ChannelMessage, ChannelImage, ChannelDocument, ChannelResponse, MessageHandler } from './types.js';
+
+/** Convert MIME type to file extension */
+function mimeToExtension(mimeType: string): string {
+  const map: Record<string, string> = {
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'application/vnd.ms-excel': '.xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    'application/vnd.ms-powerpoint': '.ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+    'text/plain': '.txt',
+    'text/csv': '.csv',
+    'text/markdown': '.md',
+    'application/json': '.json',
+  };
+  return map[mimeType] || '';
+}
 import { channelRegistry } from './registry.js';
 
 const logger = pino({ name: 'a2a-channel' });
@@ -310,8 +328,40 @@ export class A2AChannel implements Channel {
         logger.info({ from: message.from, imageCount: images.length }, 'Received images via A2A');
       }
 
-      // Skip system messages or empty messages (but allow if images present)
-      if (message.from === 'system' || (!text.trim() && images.length === 0)) {
+      // Extract documents from data/file parts (PDFs, Office docs, etc.)
+      const documents: ChannelDocument[] = [];
+      const documentMimeTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'text/plain',
+        'text/csv',
+        'text/markdown',
+        'application/json',
+      ];
+      for (const part of message.payload.parts || []) {
+        if ((part.kind === 'data' || part.kind === 'file') && part.mimeType && documentMimeTypes.includes(part.mimeType)) {
+          const docId = `a2a-doc-${Date.now()}-${documents.length}`;
+          documents.push({
+            id: docId,
+            filename: `document-${documents.length}${mimeToExtension(part.mimeType)}`,
+            mimeType: part.mimeType,
+            text: '', // Text extraction would happen in message handler
+            base64: part.data,
+          });
+        }
+      }
+
+      if (documents.length > 0) {
+        logger.info({ from: message.from, documentCount: documents.length }, 'Received documents via A2A');
+      }
+
+      // Skip system messages or empty messages (but allow if attachments present)
+      if (message.from === 'system' || (!text.trim() && images.length === 0 && documents.length === 0)) {
         logger.debug({ from: message.from, taskId: message.taskId }, 'Skipping system/empty message');
         return;
       }
@@ -325,6 +375,7 @@ export class A2AChannel implements Channel {
         chatId: 'gopherhole',
         isGroup: false,
         images: images.length > 0 ? images : undefined,
+        documents: documents.length > 0 ? documents : undefined,
         metadata: {
           a2a: true,
           gopherhole: true,

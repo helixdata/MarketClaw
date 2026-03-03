@@ -67,11 +67,14 @@ export interface ChannelDocument {
   /** Extracted text content */
   text: string;
   
+  /** Base64 encoded document data */
+  base64?: string;
+  
   /** Number of pages (for PDFs) */
   pageCount?: number;
   
   /** Word count of extracted text */
-  wordCount: number;
+  wordCount?: number;
 }
 
 export interface ChannelMessage {
