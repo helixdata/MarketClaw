@@ -107,7 +107,7 @@ describe('A2AChannel', () => {
     it('should reject config without bridgeUrl or agents', async () => {
       const result = await channel.validateConfig({ enabled: true });
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('bridgeUrl or agents');
+      expect(result.error).toContain('Either bridgeUrl, agents, or gopherhole must be configured');
     });
 
     it('should accept config with bridgeUrl', async () => {
