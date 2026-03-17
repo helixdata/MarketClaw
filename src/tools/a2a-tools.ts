@@ -15,7 +15,6 @@ const listAgentsTool: Tool = {
   parameters: {
     type: 'object',
     properties: {},
-    required: [],
   },
   execute: async (): Promise<ToolResult> => {
     try {
@@ -70,8 +69,11 @@ const sendToAgentTool: Tool = {
       const message = params.message as string;
       const viaGopherHole = params.viaGopherHole as boolean | undefined;
 
+      // Auto-detect GopherHole agents (IDs starting with "agent-")
+      const useGopherHole = viaGopherHole ?? agentId.startsWith('agent-');
+
       let response;
-      if (viaGopherHole) {
+      if (useGopherHole) {
         response = await a2aChannel.sendViaGopherHole(agentId, message);
       } else {
         response = await a2aChannel.sendToAgent(agentId, message);
@@ -171,7 +173,6 @@ const discoverAgentsTool: Tool = {
   parameters: {
     type: 'object',
     properties: {},
-    required: [],
   },
   execute: async (): Promise<ToolResult> => {
     try {

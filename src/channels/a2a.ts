@@ -701,33 +701,25 @@ export class A2AChannel implements Channel {
       throw new Error('GopherHole not connected');
     }
 
-    const task = await this.gopherholeClient.sendText(targetAgentId, text, { contextId });
-    logger.debug({ taskId: task.id, targetAgentId, status: task.status.state }, 'Sent message via GopherHole');
+    logger.info({ targetAgentId, textLength: text.length }, 'Sending message via GopherHole');
     
-    // If task already completed (synchronous response)
-    if (task.status.state === 'completed' || task.status.state === 'failed') {
-      if (task.status.state === 'failed') {
-        throw new Error(task.status.message ?? 'Task failed');
-      }
-      const responseText = task.history
-        ?.slice(-1)[0]?.parts
-        ?.filter((p) => p.kind === 'text')
-        .map((p) => p.text)
-        .join('\n') ?? '';
-      return { text: responseText, status: task.status.state };
-    }
-
-    // Wait for async response
-    const timeoutMs = this.config?.reconnectIntervalMs ? this.config.reconnectIntervalMs * 60 : 300000;
-    
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(task.id);
-        reject(new Error('GopherHole request timeout'));
-      }, timeoutMs);
-
-      this.pendingRequests.set(task.id, { resolve, reject, timeout });
+    // Use sendTextAndWait which polls for completion instead of relying on WebSocket events
+    const timeoutMs = 180000; // 3 minute timeout
+    const task = await this.gopherholeClient.sendTextAndWait(targetAgentId, text, { 
+      contextId,
+      maxWaitMs: timeoutMs,
+      pollIntervalMs: 1000,
     });
+    
+    logger.info({ taskId: task.id, status: task.status.state }, 'GopherHole task completed');
+    
+    if (task.status.state === 'failed') {
+      throw new Error(task.status.message ?? 'Task failed');
+    }
+    
+    // Extract response text using SDK helper
+    const responseText = getTaskResponseText(task);
+    return { text: responseText, status: task.status.state };
   }
 
   // Channel interface methods
