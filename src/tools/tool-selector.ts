@@ -86,9 +86,9 @@ export function selectTools(message: string, allTools: ToolDefinition[]): ToolDe
   const messageLower = message.toLowerCase();
   const categories: string[] = [];
   
-  // Simple keyword matching (A2A temporarily disabled - OAuth issues)
+  // Simple keyword matching
   const keywordMap: Record<string, string[]> = {
-    // a2a: ['a2a', 'agent', 'gopherhole', 'nova', 'send to agent'],  // DISABLED
+    a2a: ['a2a', 'agent', 'gopherhole', 'nova', 'send to agent'],
     twitter: ['tweet', 'twitter', 'x.com'],
     linkedin: ['linkedin'],
     email: ['email', 'mail'],
@@ -99,9 +99,6 @@ export function selectTools(message: string, allTools: ToolDefinition[]): ToolDe
     scheduler: ['schedule', 'remind', 'task'],
     delegate: ['delegate', 'assign', 'tweety', 'quinn', 'emma', 'pixel'],
   };
-  
-  // A2A category always includes knowledge (which works)
-  // This is a workaround for potential schema issues
   
   for (const [cat, keywords] of Object.entries(keywordMap)) {
     if (keywords.some(kw => messageLower.includes(kw))) {
