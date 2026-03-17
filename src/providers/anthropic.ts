@@ -171,12 +171,9 @@ export class AnthropicProvider implements Provider {
       createParams.tools = tools;
     }
 
-    // Safety limit - OAuth tokens seem to have stricter limits
-    const MAX_TOOLS = 16;
-    if (createParams.tools && createParams.tools.length > MAX_TOOLS) {
-      console.log(`[ANTHROPIC] Limiting tools: ${createParams.tools.length} → ${MAX_TOOLS}`);
-      createParams.tools = createParams.tools.slice(0, MAX_TOOLS);
-    }
+    // Note: Previously had MAX_TOOLS=16 limit, but that was a red herring.
+    // The actual fix was using array format for system prompts with OAuth tokens.
+    // Clawdbot uses same setup-token method with 50+ tools, no limit needed.
     
     // Debug: log request details (after createParams is built)
     const systemSize = Array.isArray(system) 
