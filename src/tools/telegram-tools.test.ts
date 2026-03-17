@@ -42,7 +42,7 @@ describe('telegramTools', () => {
       expect(sendTool.parameters.required).toContain('message');
     });
 
-    it('should send message to known contact (nova)', async () => {
+    it('should send message to known contact (nova via Agent HQ)', async () => {
       const mockChannel = {
         send: vi.fn().mockResolvedValue(undefined),
       };
@@ -51,7 +51,8 @@ describe('telegramTools', () => {
       const result = await sendTool.execute({ recipient: 'nova', message: 'Hello Nova!' });
 
       expect(result.success).toBe(true);
-      expect(mockChannel.send).toHaveBeenCalledWith('5900329802', { text: 'Hello Nova!' });
+      // Nova messages go to Agent HQ group
+      expect(mockChannel.send).toHaveBeenCalledWith('-5124089402', { text: 'Hello Nova!' });
     });
 
     it('should send message to known contact (brett)', async () => {
@@ -116,7 +117,8 @@ describe('telegramTools', () => {
       const result = await sendTool.execute({ recipient: 'NOVA', message: 'Hello!' });
 
       expect(result.success).toBe(true);
-      expect(mockChannel.send).toHaveBeenCalledWith('5900329802', { text: 'Hello!' });
+      // Nova messages go to Agent HQ group
+      expect(mockChannel.send).toHaveBeenCalledWith('-5124089402', { text: 'Hello!' });
     });
   });
 
