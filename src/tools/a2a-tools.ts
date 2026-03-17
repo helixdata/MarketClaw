@@ -69,8 +69,20 @@ const sendToAgentTool: Tool = {
       const message = params.message as string;
       const viaGopherHole = params.viaGopherHole as boolean | undefined;
 
-      // Auto-detect GopherHole agents (IDs starting with "agent-")
-      const useGopherHole = viaGopherHole ?? agentId.startsWith('agent-');
+      // Auto-detect GopherHole agents:
+      // 1. Explicit viaGopherHole flag
+      // 2. Agent IDs starting with "agent-"
+      // 3. GopherHole is connected and can resolve the name
+      let useGopherHole = viaGopherHole ?? agentId.startsWith('agent-');
+      
+      // If not explicitly set and GopherHole is connected, try to resolve the name
+      if (!useGopherHole && viaGopherHole === undefined && a2aChannel.isGopherHoleConnected()) {
+        // Try to resolve - if it resolves to a different ID, use GopherHole
+        const resolved = await a2aChannel.resolveAgentId(agentId);
+        if (resolved !== agentId) {
+          useGopherHole = true;
+        }
+      }
 
       let response;
       if (useGopherHole) {

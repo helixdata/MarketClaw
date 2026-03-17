@@ -122,6 +122,11 @@ export class A2AChannel implements Channel {
   
   // GopherHole SDK client
   private gopherholeClient: GopherHole | null = null;
+  
+  // Cache of discovered agents: name (lowercase) → agent ID
+  private agentNameCache: Map<string, string> = new Map();
+  private agentCacheTime: number = 0;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   async initialize(config: ChannelConfig): Promise<void> {
     this.config = config as A2AChannelConfig;
@@ -274,8 +279,16 @@ export class A2AChannel implements Channel {
     });
 
     // Set up event handlers
-    this.gopherholeClient.on('connect', () => {
+    this.gopherholeClient.on('connect', async () => {
       logger.info({ agentId: this.gopherholeClient?.id }, 'Connected to GopherHole via SDK');
+      
+      // Pre-populate agent cache for fast name resolution
+      try {
+        const agents = await this.discoverAgents();
+        logger.info({ agentCount: agents.length }, 'Pre-loaded agent cache');
+      } catch (err) {
+        logger.warn({ error: (err as Error).message }, 'Failed to pre-load agent cache');
+      }
     });
 
     this.gopherholeClient.on('disconnect', (reason) => {
@@ -665,7 +678,7 @@ export class A2AChannel implements Channel {
   }
 
   /**
-   * Discover agents via GopherHole SDK
+   * Discover agents via GopherHole SDK and update cache
    */
   async discoverAgents(): Promise<Array<{ id: string; name: string; description?: string; skills: string[] }>> {
     if (!this.gopherholeClient) {
@@ -674,16 +687,55 @@ export class A2AChannel implements Channel {
 
     try {
       const result = await this.gopherholeClient.discover({ limit: 50 });
-      return result.agents.map(agent => ({
+      const agents = result.agents.map(agent => ({
         id: agent.id,
         name: agent.name,
         description: agent.description ?? undefined,
         skills: agent.tags || [],
       }));
+      
+      // Update name cache
+      this.agentNameCache.clear();
+      for (const agent of agents) {
+        this.agentNameCache.set(agent.name.toLowerCase(), agent.id);
+        // Also cache by ID for quick lookups
+        this.agentNameCache.set(agent.id.toLowerCase(), agent.id);
+      }
+      this.agentCacheTime = Date.now();
+      
+      logger.info({ agentCount: agents.length }, 'Agent cache updated');
+      return agents;
     } catch (error) {
       logger.error({ error: (error as Error).message }, 'Error discovering agents via SDK');
       return [];
     }
+  }
+  
+  /**
+   * Resolve an agent name or ID to a GopherHole agent ID
+   * Returns the original input if not found (might be a direct agent ID)
+   */
+  async resolveAgentId(nameOrId: string): Promise<string> {
+    const key = nameOrId.toLowerCase();
+    
+    // Check cache first
+    if (this.agentNameCache.has(key)) {
+      return this.agentNameCache.get(key)!;
+    }
+    
+    // If cache is stale or empty, refresh
+    const cacheAge = Date.now() - this.agentCacheTime;
+    if (this.agentNameCache.size === 0 || cacheAge > this.CACHE_TTL_MS) {
+      await this.discoverAgents();
+      
+      // Check again after refresh
+      if (this.agentNameCache.has(key)) {
+        return this.agentNameCache.get(key)!;
+      }
+    }
+    
+    // Return original if not found (might be a valid agent ID)
+    return nameOrId;
   }
 
   /**
@@ -701,11 +753,17 @@ export class A2AChannel implements Channel {
       throw new Error('GopherHole not connected');
     }
 
-    logger.info({ targetAgentId, textLength: text.length }, 'Sending message via GopherHole');
+    // Resolve friendly names to agent IDs (e.g., "nova" → "agent-9a2fb7a8")
+    const resolvedId = await this.resolveAgentId(targetAgentId);
+    if (resolvedId !== targetAgentId) {
+      logger.info({ originalName: targetAgentId, resolvedId }, 'Resolved agent name to ID');
+    }
+
+    logger.info({ targetAgentId: resolvedId, textLength: text.length }, 'Sending message via GopherHole');
     
     // Use sendTextAndWait which polls for completion instead of relying on WebSocket events
     const timeoutMs = 180000; // 3 minute timeout
-    const task = await this.gopherholeClient.sendTextAndWait(targetAgentId, text, { 
+    const task = await this.gopherholeClient.sendTextAndWait(resolvedId, text, { 
       contextId,
       maxWaitMs: timeoutMs,
       pollIntervalMs: 1000,
