@@ -12,8 +12,7 @@ import { knowledge } from './knowledge/index.js';
 import { scheduler } from './scheduler/index.js';
 import { initializeTools, toolRegistry } from './tools/index.js';
 import { selectTools, selectToolsByCategories } from './tools/tool-selector.js';
-import { routeMessage } from './tools/tool-router.js';
-import Anthropic from '@anthropic-ai/sdk';
+import { routeMessage, RouterConfig } from './tools/tool-router.js';
 import { initializeSkills } from './skills/index.js';
 import { initializeAgents, agentTools, subAgentRegistry } from './agents/index.js';
 import { readFileSync, existsSync } from 'fs';
@@ -35,8 +34,8 @@ import { repairConversationHistory } from './utils/index.js';
 
 const logger = createStructuredLogger('main');
 
-// Router client for smart tool selection (uses fast Haiku model)
-let routerClient: Anthropic | null = null;
+// Router config for smart tool selection (uses fast models)
+let routerConfig: RouterConfig | null = null;
 
 // Conversation history per user
 const conversationHistory: Map<string, Message[]> = new Map();
@@ -204,9 +203,9 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
   const allTools = toolRegistry.getDefinitions();
   let tools: typeof allTools;
   
-  if (routerClient) {
+  if (routerConfig) {
     try {
-      const routeResult = await routeMessage(message.text, routerClient);
+      const routeResult = await routeMessage(message.text, routerConfig);
       if (routeResult.categories.length > 0) {
         tools = selectToolsByCategories(routeResult.categories, allTools);
         msgLogger.debug('AI router selected tools', { 
@@ -227,7 +226,7 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
       });
     }
   } else {
-    // No router client, use keyword fallback
+    // No router config, use keyword fallback
     tools = selectTools(message.text, allTools);
   }
 
@@ -434,9 +433,9 @@ async function executeTask(taskPrompt: string, context?: { productId?: string; c
   const allToolsDefs = toolRegistry.getDefinitions();
   let tools: typeof allToolsDefs;
   
-  if (routerClient) {
+  if (routerConfig) {
     try {
-      const routeResult = await routeMessage(taskPrompt, routerClient);
+      const routeResult = await routeMessage(taskPrompt, routerConfig);
       tools = routeResult.categories.length > 0
         ? selectToolsByCategories(routeResult.categories, allToolsDefs)
         : selectTools(taskPrompt, allToolsDefs);
@@ -513,24 +512,48 @@ export async function startAgent(): Promise<void> {
     logger.warn('No provider credentials found. Run: marketclaw setup');
   }
 
-  // Initialize AI router for smart tool selection (uses fast Haiku model)
-  // Prefers API key for speed, falls back to OAuth token
-  const routerApiKey = process.env.ANTHROPIC_API_KEY;
-  if (routerApiKey) {
-    routerClient = new Anthropic({ apiKey: routerApiKey });
-    logger.info('AI tool router initialized', { mode: 'api-key' });
+  // Initialize AI router for smart tool selection
+  // Configurable per provider - uses fast models (Haiku, GPT-4o-mini, etc.)
+  // Can override via ROUTER_MODEL env var
+  const routerModel = process.env.ROUTER_MODEL;
+  
+  // Try providers in order: configured provider > env vars > OAuth fallback
+  if (process.env.ANTHROPIC_API_KEY) {
+    routerConfig = { 
+      provider: 'anthropic', 
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: routerModel,
+    };
+    logger.info('AI tool router initialized', { provider: 'anthropic', model: routerModel || 'claude-3-5-haiku' });
+  } else if (process.env.OPENAI_API_KEY) {
+    routerConfig = { 
+      provider: 'openai', 
+      apiKey: process.env.OPENAI_API_KEY,
+      model: routerModel,
+    };
+    logger.info('AI tool router initialized', { provider: 'openai', model: routerModel || 'gpt-4o-mini' });
+  } else if (process.env.GROQ_API_KEY) {
+    routerConfig = { 
+      provider: 'groq', 
+      apiKey: process.env.GROQ_API_KEY,
+      model: routerModel,
+    };
+    logger.info('AI tool router initialized', { provider: 'groq', model: routerModel || 'llama-3.1-8b-instant' });
+  } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+    routerConfig = { 
+      provider: 'gemini', 
+      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+      model: routerModel,
+    };
+    logger.info('AI tool router initialized', { provider: 'gemini', model: routerModel || 'gemini-2.0-flash' });
   } else if (credentials?.accessToken) {
-    // Use OAuth token for router (works but may be slower)
-    routerClient = new Anthropic({
-      apiKey: null as any,
+    // Fallback to OAuth token for Anthropic
+    routerConfig = { 
+      provider: 'anthropic', 
       authToken: credentials.accessToken,
-      defaultHeaders: {
-        'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20',
-        'user-agent': 'claude-cli/2.1.44 (external, cli)',
-        'x-app': 'cli',
-      },
-    });
-    logger.info('AI tool router initialized', { mode: 'oauth' });
+      model: routerModel,
+    };
+    logger.info('AI tool router initialized', { provider: 'anthropic', mode: 'oauth' });
   } else {
     logger.info('AI tool router not available, using keyword fallback');
   }
