@@ -28,11 +28,12 @@ const CATEGORY_TO_TOOLS: Record<string, string[]> = {
   cost: ['cost_', 'track_cost', 'get_cost'],
 };
 
-// Core tools always included
+// Core tools always included (essential for basic operation)
 const CORE_TOOLS = [
   'delegate_task',
   'list_products', 
   'get_active_product',
+  'set_active_product',  // Must be able to switch products
 ];
 
 // Maximum tools (lower limit for OAuth token compatibility)
@@ -98,6 +99,10 @@ export function selectTools(message: string, allTools: ToolDefinition[]): ToolDe
     web: ['search', 'look up', 'find'],
     scheduler: ['schedule', 'remind', 'task'],
     delegate: ['delegate', 'assign', 'tweety', 'quinn', 'emma', 'pixel'],
+    product: ['product', 'switch to', 'work on', 'focus on', 'active product'],
+    brand: ['brand', 'tagline', 'identity', 'voice'],
+    campaign: ['campaign', 'launch', 'marketing'],
+    knowledge: ['remember', 'recall', 'knowledge', 'context'],
   };
   
   for (const [cat, keywords] of Object.entries(keywordMap)) {
