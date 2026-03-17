@@ -11,6 +11,7 @@ import { memory } from './memory/index.js';
 import { knowledge } from './knowledge/index.js';
 import { scheduler } from './scheduler/index.js';
 import { initializeTools, toolRegistry } from './tools/index.js';
+import { selectTools } from './tools/tool-selector.js';
 import { initializeSkills } from './skills/index.js';
 import { initializeAgents, agentTools, subAgentRegistry } from './agents/index.js';
 import { readFileSync, existsSync } from 'fs';
@@ -194,8 +195,9 @@ ${channel.name === 'telegram' ? `- Telegram ID: ${message.userId} (use this for 
     return { text: '⚠️ No AI provider configured. Run setup first.' };
   }
 
-  // Get tool definitions
-  const tools = toolRegistry.getDefinitions();
+  // Smart tool selection based on message content
+  const allTools = toolRegistry.getDefinitions();
+  const tools = selectTools(message.text, allTools);
 
   // Tool loop - keep going until we get a final response
   let finalResponse = '';
@@ -396,8 +398,9 @@ async function executeTask(taskPrompt: string, context?: { productId?: string; c
     { role: 'user', content: `[Automated Task]\n\n${taskPrompt}` }
   ];
 
-  // Get tool definitions
-  const tools = toolRegistry.getDefinitions();
+  // Smart tool selection based on task content
+  const allToolsDefs = toolRegistry.getDefinitions();
+  const tools = selectTools(taskPrompt, allToolsDefs);
 
   // Tool loop
   let finalResponse = '';

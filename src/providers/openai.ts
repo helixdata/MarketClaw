@@ -141,7 +141,7 @@ export class OpenAIProvider implements Provider {
     const choice = response.choices[0];
 
     // Parse tool calls
-    const toolCalls = choice.message.tool_calls?.map(tc => ({
+    const toolCalls = choice.message.tool_calls?.map((tc: any) => ({
       id: tc.id,
       name: tc.function.name,
       arguments: JSON.parse(tc.function.arguments || '{}'),
