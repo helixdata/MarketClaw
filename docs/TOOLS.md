@@ -464,3 +464,70 @@ Always:
 - Handle API errors gracefully
 - Respect rate limits
 - Return meaningful error messages
+
+## Smart Tool Selection (AI Router)
+
+MarketClaw has 100+ tools. To optimize performance and accuracy, we use an AI router to intelligently select which tools are relevant for each request.
+
+### How It Works
+
+1. **User sends message** → "Switch to GopherHole and work on the tagline"
+2. **AI Router (fast model)** → Analyzes message, returns `["product", "brand"]`
+3. **Tool Selector** → Filters to ~10-15 relevant tools
+4. **Main Model** → Completes request with focused toolset
+
+### Supported Providers
+
+The router automatically uses whichever API key is available:
+
+| Provider | Default Model | Approx Speed |
+|----------|---------------|--------------|
+| Anthropic | claude-3-5-haiku | ~200ms |
+| OpenAI | gpt-4o-mini | ~300ms |
+| Groq | llama-3.1-8b-instant | ~100ms |
+| Gemini | gemini-2.0-flash | ~200ms |
+| OpenRouter | anthropic/claude-3-haiku | ~250ms |
+
+**Priority order**: ANTHROPIC_API_KEY → OPENAI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY → OAuth token
+
+### Configuration
+
+Override the router model via environment variable:
+
+```bash
+# Use a specific model for routing
+export ROUTER_MODEL=gpt-4o-mini
+```
+
+### Tool Categories
+
+The router maps messages to these categories:
+
+| Category | Tools Included |
+|----------|----------------|
+| `product` | Product management, switching products |
+| `brand` | Brand identity, taglines, voice |
+| `twitter` | Tweets, threads, replies |
+| `linkedin` | LinkedIn posts, B2B content |
+| `email` | Email sending, sequences |
+| `calendar` | Events, meetings, scheduling |
+| `a2a` | Agent-to-agent communication |
+| `web` | Web search, research |
+| `browser` | Web automation, screenshots |
+| `campaign` | Marketing campaigns |
+| `leads` | CRM, contact management |
+| `knowledge` | Memory, recall, learning |
+| `scheduler` | Tasks, reminders, recurring jobs |
+| `delegate` | Sub-agent delegation |
+| `image` | Image generation |
+
+### Fallback Behavior
+
+If the router fails or returns empty:
+1. Falls back to keyword-based selection
+2. Core tools (`list_products`, `set_active_product`, `delegate_task`) are always available
+3. If no keywords match, includes `knowledge` and `product` categories by default
+
+### Cost
+
+Router calls are cheap (~$0.001 per request with Haiku/GPT-4o-mini) and cached for similar messages.

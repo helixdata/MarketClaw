@@ -76,6 +76,10 @@ claude setup-token
 marketclaw auth setup-token
 ```
 
+This uses OAuth tokens (`sk-ant-oat-*`) instead of API keys. Works with all Claude models and full tool support.
+
+> **Technical Note**: OAuth tokens require system prompts in array format when using tools. MarketClaw handles this automatically — the Claude Code identity is sent as the first block, followed by your system prompt.
+
 ---
 
 ## OpenAI (GPT)
