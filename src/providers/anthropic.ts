@@ -136,15 +136,22 @@ export class AnthropicProvider implements Provider {
 
     // Extract system prompt
     const systemMessage = request.messages.find(m => m.role === 'system');
-    let system = request.systemPrompt || systemMessage?.content;
+    const systemContent = request.systemPrompt || systemMessage?.content || '';
     
-    // For OAuth tokens, MUST include Claude Code identity (required by Anthropic)
+    // For OAuth tokens with tools, system prompt MUST be in array format
+    // with the Claude Code identity as the first block (required by Anthropic)
+    let system: any;
     if (this.isOAuthToken) {
-      system = `You are Claude Code, Anthropic's official CLI for Claude.\n\n${system || ''}`;
+      const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
+      system = [
+        { type: 'text', text: CLAUDE_CODE_IDENTITY },
+      ];
+      if (systemContent) {
+        system.push({ type: 'text', text: systemContent });
+      }
+    } else {
+      system = systemContent;
     }
-    
-    // Debug: log request details
-    console.log(`[ANTHROPIC] tools=${createParams.tools?.length || 0}, msgs=${messages.length}, sys=${Math.round((system?.length || 0) / 1024)}KB`);
 
     // Build tools array
     const tools = request.tools?.map(t => ({
@@ -170,6 +177,12 @@ export class AnthropicProvider implements Provider {
       console.log(`[ANTHROPIC] Limiting tools: ${createParams.tools.length} → ${MAX_TOOLS}`);
       createParams.tools = createParams.tools.slice(0, MAX_TOOLS);
     }
+    
+    // Debug: log request details (after createParams is built)
+    const systemSize = Array.isArray(system) 
+      ? system.reduce((sum, b) => sum + (b.text?.length || 0), 0)
+      : (system?.length || 0);
+    console.log(`[ANTHROPIC] model=${model}, tools=${createParams.tools?.length || 0}, msgs=${messages.length}, sys=${Math.round(systemSize / 1024)}KB, oauth=${this.isOAuthToken}`);
 
     let response;
     try {
