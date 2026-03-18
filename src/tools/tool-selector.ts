@@ -96,7 +96,7 @@ export function selectTools(message: string, allTools: ToolDefinition[]): ToolDe
     calendar: ['calendar', 'meeting', 'event'],
     image: ['image', 'picture', 'generate image'],
     browser: ['browse', 'website', 'click'],
-    web: ['search', 'look up', 'find'],
+    web: ['search', 'look up', 'find', 'scrape', 'fetch', 'url', 'website', 'check out', '.com', '.ai', '.io', '.dev', '.org', '.net'],
     scheduler: ['schedule', 'remind', 'task'],
     delegate: ['delegate', 'assign', 'tweety', 'quinn', 'emma', 'pixel'],
     product: ['product', 'switch to', 'work on', 'focus on', 'active product'],

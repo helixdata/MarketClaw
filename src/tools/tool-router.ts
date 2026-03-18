@@ -18,7 +18,7 @@ const TOOL_CATEGORIES: Record<string, string> = {
   leads: 'Lead management, CRM, contacts, prospects',
   brand: 'Brand identity, colors, voice, taglines, typography',
   knowledge: 'Storing/recalling information, memory, learning',
-  web: 'Web search, research, looking things up online',
+  web: 'Web search, research, looking things up online, fetching/scraping website content from URLs',
   scheduler: 'Scheduling tasks, reminders, recurring jobs',
   product: 'Product management, adding/switching products',
   delegate: 'Delegating tasks to specialist agents (Tweety, Quinn, Emma, etc.)',
@@ -40,6 +40,8 @@ Examples:
 - "Post this to LinkedIn: Hello world" → ["linkedin"]
 - "Schedule a reminder for tomorrow" → ["scheduler"]
 - "Search for competitors" → ["web"]
+- "Check out this website: example.com" → ["web"]
+- "Scrape gopherhole.ai" → ["web"]
 - "What agents are available?" → ["a2a"]
 - "Switch to GopherHole product" → ["product"]
 
