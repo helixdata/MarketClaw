@@ -7,7 +7,7 @@ import { ToolDefinition } from './types.js';
 
 // Map category names to tool prefixes
 const CATEGORY_TO_TOOLS: Record<string, string[]> = {
-  a2a: ['a2a_'],
+  a2a: ['a2a_', 'workspace_'],
   twitter: ['twitter_', 'post_tweet', 'reply_tweet', 'search_tweets', 'read_tweet', 'get_mentions', 'get_home_timeline'],
   linkedin: ['linkedin_', 'post_to_linkedin', 'draft_linkedin_post', 'get_linkedin_profile', 'check_linkedin_auth'],
   email: ['email_', 'send_email', 'gmail_', 'imap_'],
@@ -20,7 +20,7 @@ const CATEGORY_TO_TOOLS: Record<string, string[]> = {
   brand: ['brand_', 'set_brand', 'get_brand', 'clear_brand'],
   knowledge: ['knowledge_', 'remember', 'recall', 'search_knowledge', 'add_knowledge'],
   web: ['web_', 'search_web', 'fetch_url'],
-  scheduler: ['scheduler_', 'schedule_', 'create_task', 'list_task', 'cancel_task', 'pause_task', 'resume_task', 'run_job'],
+  scheduler: ['scheduler_', 'schedule_', 'list_scheduled_jobs', 'cancel_scheduled_job', 'pause_scheduled_job', 'resume_scheduled_job', 'run_job_now'],
   product: ['product_', 'add_product', 'list_product', 'set_active_product', 'get_active_product'],
   delegate: ['delegate_'],
   discord: ['discord_'],
@@ -89,7 +89,7 @@ export function selectTools(message: string, allTools: ToolDefinition[]): ToolDe
   
   // Simple keyword matching
   const keywordMap: Record<string, string[]> = {
-    a2a: ['a2a', 'agent', 'gopherhole', 'nova', 'send to agent'],
+    a2a: ['a2a', 'agent', 'gopherhole', 'nova', 'send to agent', 'workspace'],
     twitter: ['tweet', 'twitter', 'x.com'],
     linkedin: ['linkedin'],
     email: ['email', 'mail'],
